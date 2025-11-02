@@ -1,0 +1,70 @@
+<include>
+  <!-- 
+    Public Dialplan
+    Обработка входящих звонков от провайдера
+  -->
+  
+  <context name="public">
+    <!-- 
+      Входящий звонок
+      Все входящие звонки попадают сюда
+    -->
+    <extension name="incoming_call">
+      <condition field="destination_number" expression="^(.+)$">
+        
+        <!-- Установка переменных -->
+        <action application="set" data="hangup_after_bridge=true"/>
+        <action application="set" data="continue_on_fail=true"/>
+        <action application="set" data="call_timeout=60"/>
+        
+        <!-- Ответ на звонок -->
+        <action application="answer"/>
+        
+        <!-- Небольшая задержка -->
+        <action application="sleep" data="500"/>
+        
+        <!-- Запись звонка -->
+        <action application="set" data="RECORD_STEREO=true"/>
+        <action application="record_session" data="$${recordings_dir}/${uuid}.wav"/>
+        
+        <!-- Приветствие от AI -->
+        <action application="playback" data="/tmp/greeting.wav"/>
+        
+        <!-- Запись запроса клиента (максимум 10 секунд) -->
+        <action application="play_and_get_digits" data="0 128 3 10000 # /tmp/beep.wav /tmp/${uuid}_request.wav \d+"/>
+        
+        <!-- 
+          Здесь должна быть интеграция с Python backend:
+          1. Отправить аудио на Whisper STT
+          2. Отправить текст в AI Router
+          3. Получить решение куда перевести
+          4. Выполнить bridge
+          
+          Пока делаем простую маршрутизацию:
+        -->
+        
+        <!-- Перевод на AI консультанта (Extension 200) -->
+        <action application="bridge" data="user/200@$${domain}"/>
+        
+        <!-- Если AI не ответил - перевод на оператора -->
+        <action application="bridge" data="user/101@$${domain}"/>
+        
+        <!-- Голосовая почта если никто не ответил -->
+        <action application="voicemail" data="default $${domain} 100"/>
+        
+      </condition>
+    </extension>
+    
+    <!-- 
+      Исходящие звонки через провайдера
+    -->
+    <extension name="outbound_call">
+      <condition field="destination_number" expression="^(8|7)(\d{10})$">
+        <!-- Отправляем через gateway новофона -->
+        <action application="bridge" data="sofia/gateway/novofon/$1$2"/>
+      </condition>
+    </extension>
+    
+  </context>
+</include>
+

@@ -1,0 +1,52 @@
+<profile name="external">
+  <!-- 
+    External SIP Profile
+    Для подключения к VoIP провайдеру (Новофон)
+  -->
+  
+  <gateways>
+    <X-PRE-PROCESS cmd="include" data="../sip_profiles/external/*.xml"/>
+  </gateways>
+
+  <settings>
+    <param name="debug" value="0"/>
+    <param name="sip-trace" value="no"/>
+    <param name="sip-capture" value="no"/>
+    
+    <!-- Порт -->
+    <param name="sip-port" value="$${external_sip_port}"/>
+    <param name="tls-sip-port" value="$${external_tls_port}"/>
+    
+    <!-- IP адреса -->
+    <param name="rtp-ip" value="$${external_rtp_ip}"/>
+    <param name="sip-ip" value="$${external_sip_ip}"/>
+    <param name="ext-rtp-ip" value="$${external_rtp_ip}"/>
+    <param name="ext-sip-ip" value="$${external_sip_ip}"/>
+    
+    <!-- Кодеки -->
+    <param name="inbound-codec-prefs" value="$${global_codec_prefs}"/>
+    <param name="outbound-codec-prefs" value="$${outbound_codec_prefs}"/>
+    
+    <!-- NAT настройки -->
+    <param name="apply-nat-acl" value="nat.auto"/>
+    <param name="aggressive-nat-detection" value="true"/>
+    <param name="ext-rtp-ip" value="auto-nat"/>
+    <param name="ext-sip-ip" value="auto-nat"/>
+    <param name="rtp-timeout-sec" value="300"/>
+    <param name="rtp-hold-timeout-sec" value="1800"/>
+    
+    <!-- DTMF -->
+    <param name="dtmf-duration" value="2000"/>
+    <param name="dtmf-type" value="rfc2833"/>
+    
+    <!-- Регистрация -->
+    <param name="auth-calls" value="false"/>
+    <param name="context" value="public"/>
+    <param name="dialplan" value="XML"/>
+    
+    <!-- Таймеры -->
+    <param name="sip-timer-b" value="32000"/>
+    <param name="sip-timer-c" value="180000"/>
+  </settings>
+</profile>
+

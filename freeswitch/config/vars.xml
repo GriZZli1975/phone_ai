@@ -1,0 +1,45 @@
+<include>
+  <!-- 
+    FreeSWITCH Variables
+    Основные переменные конфигурации
+  -->
+  
+  <!-- Домен -->
+  <X-PRE-PROCESS cmd="set" data="domain=$${local_ip_v4}"/>
+  <X-PRE-PROCESS cmd="set" data="domain_name=$${domain}"/>
+  
+  <!-- IP адреса -->
+  <X-PRE-PROCESS cmd="set" data="local_ip_v4=auto"/>
+  <X-PRE-PROCESS cmd="set" data="external_sip_ip=auto-nat"/>
+  <X-PRE-PROCESS cmd="set" data="external_rtp_ip=auto-nat"/>
+  
+  <!-- SIP порты -->
+  <X-PRE-PROCESS cmd="set" data="internal_sip_port=5060"/>
+  <X-PRE-PROCESS cmd="set" data="internal_tls_port=5061"/>
+  <X-PRE-PROCESS cmd="set" data="external_sip_port=5080"/>
+  
+  <!-- RTP порты для аудио -->
+  <X-PRE-PROCESS cmd="set" data="rtp_start_port=16384"/>
+  <X-PRE-PROCESS cmd="set" data="rtp_end_port=16394"/>
+  
+  <!-- ESL (Event Socket Layer) -->
+  <X-PRE-PROCESS cmd="set" data="event_socket_port=8021"/>
+  <X-PRE-PROCESS cmd="set" data="event_socket_password=ClueCon"/>
+  
+  <!-- Кодеки -->
+  <X-PRE-PROCESS cmd="set" data="global_codec_prefs=OPUS,PCMU,PCMA"/>
+  <X-PRE-PROCESS cmd="set" data="outbound_codec_prefs=OPUS,PCMU,PCMA"/>
+  
+  <!-- Запись звонков -->
+  <X-PRE-PROCESS cmd="set" data="recordings_dir=/recordings"/>
+  
+  <!-- Звуковые файлы -->
+  <X-PRE-PROCESS cmd="set" data="sound_prefix=$${sounds_dir}/ru/RU/elena"/>
+  
+  <!-- Hold music -->
+  <X-PRE-PROCESS cmd="set" data="hold_music=local_stream://moh"/>
+  
+  <!-- API ограничения -->
+  <X-PRE-PROCESS cmd="set" data="api_hang_up_hook=true"/>
+</include>
+
