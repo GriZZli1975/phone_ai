@@ -30,7 +30,7 @@ services:
     environment:
       - ASTERISK_HOST=127.0.0.1
       - ASTERISK_ARI_PORT=8088
-    command: bash -c "uvicorn main:app --host 0.0.0.0 --port 8000 & python3 ari_simple.py"
+    command: bash -c "uvicorn main:app --host 0.0.0.0 --port 8000 & python3 agi_handler.py"
 
   # Frontend
   frontend:
