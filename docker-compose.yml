@@ -3,7 +3,7 @@ version: '3.8'
 services:
   # Asterisk - телефония
   asterisk:
-    image: andrius/asterisk:20
+    image: andrius/asterisk:latest
     container_name: asterisk
     network_mode: host
     volumes:
