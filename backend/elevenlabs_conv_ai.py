@@ -113,71 +113,71 @@ class ElevenLabsConvAI:
         """
         text = ""
         audio_chunks = []
-        
+
+        if not self.ws:
+            print("[ELEVEN] receive_response called without active websocket")
+            return text, audio_chunks
+
         try:
             while True:
-                message = await asyncio.wait_for(self.ws.recv(), timeout=1.0)
+                message = await self.ws.recv()
                 data = json.loads(message)
-                
+
                 msg_type = data.get('type')
-                
+
                 if msg_type == 'audio':
-                    # Получили аудио чанк - вложенная структура!
                     audio_event = data.get('audio_event', {})
                     audio_base64 = audio_event.get('audio_base_64', '')
                     if audio_base64:
                         audio_data = base64.b64decode(audio_base64)
                         audio_chunks.append(audio_data)
-                        if len(audio_chunks) <= 3:
-                            print(f"[ELEVEN] Got audio chunk #{len(audio_chunks)}: {len(audio_data)} bytes")
-                        
+                        print(f"[ELEVEN] 🔊 Agent audio chunk #{len(audio_chunks)}: {len(audio_data)} bytes")
+
                 elif msg_type == 'agent_response':
-                    # Ответ агента - тоже вложенная структура!
                     agent_response_event = data.get('agent_response_event', {})
                     response_text = agent_response_event.get('agent_response', '')
                     if response_text:
                         text += response_text
                         print(f"[ELEVEN] Agent says: {response_text}")
-                    
+
+                elif msg_type == 'agent_response_end':
+                    print(f"[ELEVEN] Agent response complete: {len(audio_chunks)} audio chunks")
+                    break
+
                 elif msg_type == 'user_transcript':
-                    # Транскрипция речи ПОЛЬЗОВАТЕЛЯ!
                     user_event = data.get('user_transcription_event', {})
                     user_text = user_event.get('user_transcript', '')
                     if user_text:
                         print(f"[ELEVEN] 👤 USER said: {user_text}")
-                        
+
                 elif msg_type == 'vad_score':
-                    # Voice Activity Detection
                     vad_event = data.get('vad_score_event', {})
                     vad_value = vad_event.get('vad_score', 0)
-                    if vad_value > 0.5:
-                        print(f"[ELEVEN] 🎤 Voice detected: {vad_value}")
-                    
+                    print(f"[ELEVEN] 🎤 VAD score: {vad_value}")
+
                 elif msg_type == 'transcript':
-                    # Альтернативный формат текста
                     transcript_text = data.get('text', '')
                     if transcript_text:
                         text += transcript_text
                         print(f"[ELEVEN] Transcript: {transcript_text}")
-                    
-                elif msg_type == 'agent_response_end':
-                    # Агент закончил отвечать
-                    print(f"[ELEVEN] Agent response complete: {len(audio_chunks)} audio chunks")
-                    break
-                    
+
                 elif msg_type == 'ping':
-                    # Keepalive - игнорируем
-                    pass
-                    
+                    ping_event = data.get('ping_event', {})
+                    event_id = ping_event.get('event_id')
+                    if event_id:
+                        await self.ws.send(json.dumps({"type": "pong", "event_id": event_id}))
+                        print(f"[ELEVEN] ↔️ Pong sent (event_id={event_id})")
+
                 elif msg_type == 'error':
                     print(f"[ELEVEN] Error: {data}")
                     break
-                    
-        except asyncio.TimeoutError:
-            # Таймаут - возвращаем что есть
-            if audio_chunks:
-                print(f"[ELEVEN] Timeout, but got {len(audio_chunks)} audio chunks")
-            
+
+                else:
+                    print(f"[ELEVEN] Received event: {msg_type} -> {data}")
+
+        except websockets.ConnectionClosed as exc:
+            print(f"[ELEVEN] Connection closed while waiting for response: {exc}")
+
         return text, audio_chunks
         
     async def close(self):
