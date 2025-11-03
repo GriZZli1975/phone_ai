@@ -24,8 +24,24 @@ def resample_8k_to_16k(audio_8k: bytes) -> bytes:
     # Конвертируем bytes → numpy array
     audio_array = np.frombuffer(audio_8k, dtype=np.int16)
     
-    # Resample 8000 → 16000 Hz
+    # Resample 8000 → 16000 Hz (увеличиваем в 2 раза)
     resampled = signal.resample(audio_array, len(audio_array) * 2)
+    
+    # Конвертируем обратно в int16
+    resampled_int16 = resampled.astype(np.int16)
+    
+    return resampled_int16.tobytes()
+
+
+def resample_16k_to_8k(audio_16k: bytes) -> bytes:
+    """
+    Конвертация PCM16 16kHz → 8kHz для Asterisk
+    """
+    # Конвертируем bytes → numpy array
+    audio_array = np.frombuffer(audio_16k, dtype=np.int16)
+    
+    # Resample 16000 → 8000 Hz (уменьшаем в 2 раза)
+    resampled = signal.resample(audio_array, len(audio_array) // 2)
     
     # Конвертируем обратно в int16
     resampled_int16 = resampled.astype(np.int16)
@@ -152,12 +168,12 @@ class AudioSocketServer:
                     if frame_count <= 5 or frame_count % 50 == 0:
                         print(f"[AUDIOSOCKET] Frame #{frame_count}: type={frame_type:02x}, len={length}, data={len(audio_data)} bytes")
                     
-                    # TODO: Конвертировать 8kHz → 16kHz если нужно
-                    # Пока отправляем как есть
+                    # Конвертируем 8kHz → 16kHz для ElevenLabs
                     try:
-                        await elevenlabs.send_audio(audio_data)
+                        audio_16k = resample_8k_to_16k(audio_data)
+                        await elevenlabs.send_audio(audio_16k)
                         if frame_count <= 5:
-                            print(f"[ELEVEN] Sent audio chunk #{frame_count} to ElevenLabs")
+                            print(f"[ELEVEN] Sent audio chunk #{frame_count} ({len(audio_data)}→{len(audio_16k)} bytes, 8k→16k)")
                     except Exception as e:
                         print(f"[ELEVEN] Error sending audio: {e}")
                     
@@ -191,19 +207,33 @@ class AudioSocketServer:
             # Получаем ответ от ElevenLabs
             text, audio_chunks = await elevenlabs.receive_response()
             
-            print(f"[AUDIOSOCKET] Got response: {len(audio_chunks)} chunks")
+            print(f"[AUDIOSOCKET] Got response: text='{text}', audio={len(audio_chunks)} chunks")
             
+            if not audio_chunks:
+                print("[AUDIOSOCKET] No audio to send back")
+                return
+                
             # Отправляем каждый аудио чанк в Asterisk
-            for chunk in audio_chunks:
+            total_sent = 0
+            for i, chunk in enumerate(audio_chunks):
+                # Конвертируем 16kHz → 8kHz для Asterisk
+                chunk_8k = resample_16k_to_8k(chunk)
+                
                 # AudioSocket audio frame: 0x10 + length + data
-                frame = struct.pack('!BH', 0x10, len(chunk)) + chunk
+                frame = struct.pack('!BH', 0x10, len(chunk_8k)) + chunk_8k
                 writer.write(frame)
                 await writer.drain()
+                total_sent += len(chunk_8k)
                 
-            print("[AUDIOSOCKET] Finished sending audio")
+                if i < 3 or i % 20 == 0:
+                    print(f"[AUDIOSOCKET] Sent chunk #{i+1}: {len(chunk)}→{len(chunk_8k)} bytes (16k→8k)")
+                
+            print(f"[AUDIOSOCKET] Finished sending {total_sent} bytes audio to Asterisk")
             
         except Exception as e:
             print(f"[AUDIOSOCKET] Send error: {e}")
+            import traceback
+            traceback.print_exc()
             
     async def run(self):
         """Запуск сервера"""
