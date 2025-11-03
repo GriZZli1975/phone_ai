@@ -82,7 +82,7 @@ class ElevenLabsConvAI:
     async def send_audio(self, audio_chunk: bytes):
         """
         Отправка аудио чанка в ElevenLabs
-        audio_chunk: PCM16 8kHz mono audio data
+        audio_chunk: PCM audio data (μ-law 8kHz для телефонии)
         """
         if not self.ws:
             await self.connect()
@@ -90,17 +90,19 @@ class ElevenLabsConvAI:
         # Кодируем в base64
         audio_base64 = base64.b64encode(audio_chunk).decode('utf-8')
         
+        # Правильный формат по документации:
+        # https://elevenlabs.io/docs/agents-platform/api-reference/agents-platform/websocket
         message = {
-            "type": "audio",
-            "audio": audio_base64
+            "user_audio_chunk": audio_base64
         }
         
         await self.ws.send(json.dumps(message))
         
     async def end_user_turn(self):
         """Сигнализируем что пользователь закончил говорить"""
+        # По документации: user_activity для сигнала активности
         message = {
-            "type": "user_audio_done"
+            "type": "user_activity"
         }
         await self.ws.send(json.dumps(message))
         
