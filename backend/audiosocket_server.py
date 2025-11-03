@@ -120,8 +120,9 @@ class AudioSocketServer:
             
             if uuid_type == 0x01:  # UUID frame
                 uuid_bytes = await reader.readexactly(uuid_len)
-                uuid_str = uuid_bytes.decode('utf-8')
-                print(f"[AUDIOSOCKET] Received UUID: {uuid_str}")
+                # UUID - это 16 байт в hex формате, не UTF-8 строка
+                uuid_hex = uuid_bytes.hex()
+                print(f"[AUDIOSOCKET] Received UUID: {uuid_hex} ({uuid_len} bytes)")
             else:
                 print(f"[AUDIOSOCKET] WARNING: Expected UUID type 0x01, got {uuid_type:02x}")
             
