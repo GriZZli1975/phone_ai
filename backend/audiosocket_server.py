@@ -7,12 +7,30 @@ import asyncio
 import struct
 import uuid
 import sys
+import numpy as np
+from scipy import signal
 from pathlib import Path
 import os
 
 # Unbuffered output
 sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', buffering=1)
 sys.stderr = os.fdopen(sys.stderr.fileno(), 'w', buffering=1)
+
+
+def resample_8k_to_16k(audio_8k: bytes) -> bytes:
+    """
+    Конвертация PCM16 8kHz → 16kHz для ElevenLabs
+    """
+    # Конвертируем bytes → numpy array
+    audio_array = np.frombuffer(audio_8k, dtype=np.int16)
+    
+    # Resample 8000 → 16000 Hz
+    resampled = signal.resample(audio_array, len(audio_array) * 2)
+    
+    # Конвертируем обратно в int16
+    resampled_int16 = resampled.astype(np.int16)
+    
+    return resampled_int16.tobytes()
 
 # Manual .env loading
 try:
@@ -64,7 +82,7 @@ class AudioSocketServer:
             
             # Задачи для двустороннего стриминга
             receive_task = asyncio.create_task(
-                self.receive_from_asterisk(reader, elevenlabs)
+                self.receive_from_asterisk(reader, writer, elevenlabs)
             )
             send_task = asyncio.create_task(
                 self.send_to_asterisk(writer, elevenlabs)
@@ -88,7 +106,7 @@ class AudioSocketServer:
             await writer.wait_closed()
             print(f"[AUDIOSOCKET] Connection closed: {call_id}")
             
-    async def receive_from_asterisk(self, reader, elevenlabs: ElevenLabsConvAI):
+    async def receive_from_asterisk(self, reader, writer, elevenlabs: ElevenLabsConvAI):
         """
         Получение аудио от Asterisk и отправка в ElevenLabs
         """
@@ -96,17 +114,8 @@ class AudioSocketServer:
         frame_count = 0
         
         try:
-            # Первое сообщение - UUID от Asterisk
-            first = await reader.readexactly(3)
-            msg_type, msg_len = struct.unpack('!BH', first)
-            print(f"[AUDIOSOCKET] First message: type={msg_type:02x}, len={msg_len}")
-            
-            if msg_type == 0x00:  # UUID
-                uuid_data = await reader.readexactly(msg_len)
-                uuid_str = uuid_data.decode('utf-8')
-                print(f"[AUDIOSOCKET] Got UUID: {uuid_str}")
-            else:
-                print(f"[AUDIOSOCKET] WARNING: Expected UUID (0x00), got type {msg_type:02x}")
+            # AudioSocket сразу отправляет аудио фреймы без UUID
+            print("[AUDIOSOCKET] Reading audio frames...")
             
             while True:
                 # Читаем аудио фреймы

@@ -6,6 +6,7 @@ openai==1.10.0
 elevenlabs==0.2.27
 soundfile==0.12.1
 numpy==1.26.3
+scipy==1.11.4
 sqlalchemy==2.0.25
 psycopg2-binary==2.9.9
 pydantic==2.5.3
