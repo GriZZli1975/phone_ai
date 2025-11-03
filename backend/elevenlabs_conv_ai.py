@@ -43,12 +43,13 @@ class ElevenLabsConvAI:
         self.agent_id = agent_id or ELEVENLABS_AGENT_ID
         self.ws = None
         self.conversation_id = None
-        self.user_input_audio_format = None
-        self.agent_output_audio_format = None
+        self.audio_queue = None
         
     async def connect(self):
         """Подключение к ElevenLabs Conversational AI"""
         try:
+            self.audio_queue = asyncio.Queue()
+            
             # Формируем URL с API ключом
             url = f"{ELEVENLABS_WS_URL}?agent_id={self.agent_id}"
             
@@ -71,11 +72,9 @@ class ElevenLabsConvAI:
             if welcome_data.get('type') == 'conversation_initiation_metadata':
                 metadata = welcome_data.get('conversation_initiation_metadata_event', {})
                 self.conversation_id = metadata.get('conversation_id')
-                self.user_input_audio_format = metadata.get('user_input_audio_format')
-                self.agent_output_audio_format = metadata.get('agent_output_audio_format')
+                audio_format = metadata.get('user_input_audio_format')
                 print(f"[ELEVEN] Conversation ID: {self.conversation_id}")
-                print(f"[ELEVEN] User input format: {self.user_input_audio_format}")
-                print(f"[ELEVEN] Agent output format: {self.agent_output_audio_format}")
+                print(f"[ELEVEN] Audio format: {audio_format}")
             
             return True
             
@@ -110,27 +109,20 @@ class ElevenLabsConvAI:
         }
         await self.ws.send(json.dumps(message))
         
-    async def receive_response(self):
+    async def stream_responses(self):
         """
-        Получение ответа от ElevenLabs
-        Возвращает: (text, audio_chunks)
+        Постоянный стрим событий от ElevenLabs
+        Аудио кладётся в очередь для немедленной отправки
         """
-        text = ""
-        audio_chunks = []
-
         if not self.ws:
-            print("[ELEVEN] receive_response called without active websocket")
-            return text, audio_chunks
+            print("[ELEVEN] stream_responses called without active websocket")
+            return
+
+        chunk_count = 0
 
         try:
             while True:
-                try:
-                    message = await asyncio.wait_for(self.ws.recv(), timeout=0.5)
-                except asyncio.TimeoutError:
-                    if audio_chunks or text:
-                        print(f"[ELEVEN] Timeout waiting for more agent data (collected {len(audio_chunks)} chunks)")
-                        break
-                    continue
+                message = await self.ws.recv()
                 data = json.loads(message)
 
                 msg_type = data.get('type')
@@ -140,19 +132,20 @@ class ElevenLabsConvAI:
                     audio_base64 = audio_event.get('audio_base_64', '')
                     if audio_base64:
                         audio_data = base64.b64decode(audio_base64)
-                        audio_chunks.append(audio_data)
-                        print(f"[ELEVEN] 🔊 Agent audio chunk #{len(audio_chunks)}: {len(audio_data)} bytes")
+                        chunk_count += 1
+                        await self.audio_queue.put(audio_data)
+                        print(f"[ELEVEN] 🔊 Agent audio chunk #{chunk_count}: {len(audio_data)} bytes → queued")
 
                 elif msg_type == 'agent_response':
                     agent_response_event = data.get('agent_response_event', {})
                     response_text = agent_response_event.get('agent_response', '')
                     if response_text:
-                        text += response_text
                         print(f"[ELEVEN] Agent says: {response_text}")
 
                 elif msg_type == 'agent_response_end':
-                    print(f"[ELEVEN] Agent response complete: {len(audio_chunks)} audio chunks")
-                    break
+                    print(f"[ELEVEN] Agent response complete: {chunk_count} audio chunks")
+                    await self.audio_queue.put(None)
+                    chunk_count = 0
 
                 elif msg_type == 'user_transcript':
                     user_event = data.get('user_transcription_event', {})
@@ -163,32 +156,23 @@ class ElevenLabsConvAI:
                 elif msg_type == 'vad_score':
                     vad_event = data.get('vad_score_event', {})
                     vad_value = vad_event.get('vad_score', 0)
-                    print(f"[ELEVEN] 🎤 VAD score: {vad_value}")
-
-                elif msg_type == 'transcript':
-                    transcript_text = data.get('text', '')
-                    if transcript_text:
-                        text += transcript_text
-                        print(f"[ELEVEN] Transcript: {transcript_text}")
+                    if vad_value > 0.3:
+                        print(f"[ELEVEN] 🎤 VAD: {vad_value:.2f}")
 
                 elif msg_type == 'ping':
                     ping_event = data.get('ping_event', {})
                     event_id = ping_event.get('event_id')
                     if event_id:
                         await self.ws.send(json.dumps({"type": "pong", "event_id": event_id}))
-                        print(f"[ELEVEN] ↔️ Pong sent (event_id={event_id})")
 
                 elif msg_type == 'error':
                     print(f"[ELEVEN] Error: {data}")
+                    await self.audio_queue.put(None)
                     break
 
-                else:
-                    print(f"[ELEVEN] Received event: {msg_type} -> {data}")
-
         except websockets.ConnectionClosed as exc:
-            print(f"[ELEVEN] Connection closed while waiting for response: {exc}")
-
-        return text, audio_chunks
+            print(f"[ELEVEN] Connection closed: {exc}")
+            await self.audio_queue.put(None)
         
     async def close(self):
         """Закрытие соединения"""

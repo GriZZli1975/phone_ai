@@ -109,9 +109,12 @@ class AudioSocketServer:
             send_task = asyncio.create_task(
                 self.send_to_asterisk(writer, elevenlabs)
             )
+            stream_task = asyncio.create_task(
+                elevenlabs.stream_responses()
+            )
             
-            # Ждём завершения ОБЕИХ задач (полный диалог)
-            await asyncio.gather(receive_task, send_task, return_exceptions=True)
+            # Ждём завершения ВСЕХ задач (полный диалог)
+            await asyncio.gather(receive_task, send_task, stream_task, return_exceptions=True)
             
             print("[AUDIOSOCKET] Conversation cycle completed")
                 
@@ -230,49 +233,45 @@ class AudioSocketServer:
             
     async def send_to_asterisk(self, writer, elevenlabs: ElevenLabsConvAI):
         """
-        Получение ответа от ElevenLabs и отправка в Asterisk
+        Получение аудио из очереди и отправка в Asterisk в реальном времени
         """
-        print("[AUDIOSOCKET] Started sending to Asterisk")
+        print("[AUDIOSOCKET] Started sending to Asterisk (streaming mode)")
+        
+        total_sent = 0
+        chunks_sent = 0
+        chunk_size = 160  # 20ms μ-law @8kHz
         
         try:
-            # Получаем ответ от ElevenLabs
-            text, audio_chunks = await elevenlabs.receive_response()
-            
-            print(f"[AUDIOSOCKET] Got response: text='{text}', audio={len(audio_chunks)} chunks")
-            
-            if not audio_chunks:
-                print("[AUDIOSOCKET] No audio to send back")
-                return
+            while True:
+                # Читаем следующий чанк из очереди
+                audio_chunk = await elevenlabs.audio_queue.get()
                 
-            # Собираем все аудио вместе
-            full_audio = b''.join(audio_chunks)
-            print(f"[AUDIOSOCKET] Total audio from ElevenLabs: {len(full_audio)} bytes (μ-law 8kHz)")
-            
-            # Разбиваем на чанки по 160 байт (20ms аудио μ-law @8kHz)
-            chunk_size = 160
-            total_sent = 0
-            chunks_sent = 0
-            
-            for offset in range(0, len(full_audio), chunk_size):
-                chunk = full_audio[offset:offset+chunk_size]
-                if len(chunk) < chunk_size:
-                    chunk = chunk.ljust(chunk_size, b'\x00')
+                # None = конец ответа агента
+                if audio_chunk is None:
+                    print(f"[AUDIOSOCKET] ✅ Agent response sent: {total_sent} bytes in {chunks_sent} frames")
+                    total_sent = 0
+                    chunks_sent = 0
+                    continue
                 
-                # AudioSocket audio frame: 0x10 + length + data
-                frame = struct.pack('!BH', 0x10, len(chunk)) + chunk
-                writer.write(frame)
-                await writer.drain()
-                
-                total_sent += len(chunk)
-                chunks_sent += 1
-                
-                # Небольшая задержка между чанками (20ms)
-                await asyncio.sleep(0.02)
-                
-                if chunks_sent <= 3 or chunks_sent % 20 == 0:
-                    print(f"[AUDIOSOCKET] Sent chunk #{chunks_sent}: {len(chunk)} bytes")
-                
-            print(f"[AUDIOSOCKET] ✅ Finished sending {total_sent} bytes in {chunks_sent} chunks to Asterisk")
+                # Разбиваем большой чанк на мелкие кадры
+                for offset in range(0, len(audio_chunk), chunk_size):
+                    frame_data = audio_chunk[offset:offset+chunk_size]
+                    if len(frame_data) < chunk_size:
+                        frame_data = frame_data.ljust(chunk_size, b'\xff')
+                    
+                    # AudioSocket audio frame: 0x10 + length + data
+                    frame = struct.pack('!BH', 0x10, len(frame_data)) + frame_data
+                    writer.write(frame)
+                    await writer.drain()
+                    
+                    total_sent += len(frame_data)
+                    chunks_sent += 1
+                    
+                    # Задержка 20ms между кадрами
+                    await asyncio.sleep(0.02)
+                    
+                    if chunks_sent <= 5 or chunks_sent % 50 == 0:
+                        print(f"[AUDIOSOCKET] ⬅️ Sent frame #{chunks_sent}: {len(frame_data)} bytes")
             
         except Exception as e:
             print(f"[AUDIOSOCKET] Send error: {e}")
