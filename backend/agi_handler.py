@@ -222,10 +222,12 @@ async def handle_call(session: AGISession, call_id: str):
         
         # Генерируем ответ
         response_text = f"Переводю вас в отдел {department}"
-        response_audio = f"/tmp/response_{call_id}.mp3"
+        response_audio = f"/recordings/response_{call_id}.mp3"
+        response_audio_asterisk = f"/var/spool/asterisk/monitor/response_{call_id}"
         
         if await text_to_speech(response_text, response_audio):
-            await session.playback(response_audio)
+            # Asterisk автоматически определит формат по содержимому
+            await session.playback(response_audio_asterisk)
         
         # Здесь можно добавить перевод на оператора
         # await session.send_command(f'EXEC Dial PJSIP/{department}@trunk')
