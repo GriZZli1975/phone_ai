@@ -64,9 +64,14 @@ class ElevenLabsConvAI:
             welcome = await self.ws.recv()
             welcome_data = json.loads(welcome)
             
+            print(f"[ELEVEN] Welcome message: {welcome[:100]}...")
+            
             if welcome_data.get('type') == 'conversation_initiation_metadata':
-                self.conversation_id = welcome_data.get('conversation_id')
+                metadata = welcome_data.get('conversation_initiation_metadata_event', {})
+                self.conversation_id = metadata.get('conversation_id')
+                audio_format = metadata.get('user_input_audio_format')
                 print(f"[ELEVEN] Conversation ID: {self.conversation_id}")
+                print(f"[ELEVEN] Audio format: {audio_format}")
             
             return True
             
