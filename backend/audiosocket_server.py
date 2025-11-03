@@ -6,8 +6,13 @@ Asterisk передаёт аудио через TCP на порт 9092
 import asyncio
 import struct
 import uuid
+import sys
 from pathlib import Path
 import os
+
+# Unbuffered output
+sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', buffering=1)
+sys.stderr = os.fdopen(sys.stderr.fileno(), 'w', buffering=1)
 
 # Manual .env loading
 try:
