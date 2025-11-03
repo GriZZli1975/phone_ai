@@ -1,123 +1,60 @@
 version: '3.8'
 
 services:
-  # ============================================
-  # FreeSWITCH - Телефония
-  # ============================================
-  freeswitch:
-    build:
-      context: ./freeswitch
-      dockerfile: Dockerfile
-    container_name: freeswitch
-    hostname: freeswitch
-    ports:
-      - "5060:5060/udp"     # SIP
-      - "5060:5060/tcp"     # SIP-TCP
-      - "5080:5080/tcp"     # SIP-TLS
-      - "8021:8021"         # ESL (Event Socket Layer)
-      - "16384-16394:16384-16394/udp"  # RTP (аудио)
+  # Asterisk - телефония
+  asterisk:
+    image: andrius/asterisk:20
+    container_name: asterisk
+    network_mode: host
     volumes:
-      - ./freeswitch/config:/etc/freeswitch:ro
-      - freeswitch_storage:/var/lib/freeswitch
-      - call_recordings:/recordings
-    environment:
-      - SIP_PROVIDER_HOST=${SIP_PROVIDER_HOST}
-      - SIP_USERNAME=${SIP_USERNAME}
-      - SIP_PASSWORD=${SIP_PASSWORD}
-    networks:
-      - callcenter
+      - ./asterisk/conf:/etc/asterisk
+      - ./recordings:/var/spool/asterisk/monitor
+      - ./asterisk/sounds:/var/lib/asterisk/sounds
     restart: unless-stopped
+    environment:
+      - TZ=Europe/Moscow
 
-  # ============================================
-  # Backend - Python FastAPI
-  # ============================================
+  # Python backend для AI
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    build: ./backend
     container_name: backend
     ports:
       - "8000:8000"
+      - "4573:4573"  # FastAGI
     volumes:
       - ./backend:/app
-      - call_recordings:/recordings
-    environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
-      - DATABASE_URL=${DATABASE_URL}
-      - FREESWITCH_HOST=${FREESWITCH_HOST}
-      - FREESWITCH_PORT=${FREESWITCH_PORT}
-      - FREESWITCH_PASSWORD=${FREESWITCH_PASSWORD}
-      - JWT_SECRET=${JWT_SECRET}
-      - DEBUG=${DEBUG:-false}
+      - ./recordings:/recordings
+    env_file:
+      - .env
+    restart: unless-stopped
     depends_on:
       - postgres
-      - freeswitch
-    networks:
-      - callcenter
-    restart: unless-stopped
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    command: bash -c "uvicorn main:app --host 0.0.0.0 --port 8000 & python3 agi_handler.py"
 
-  # ============================================
-  # Frontend - React
-  # ============================================
+  # Frontend
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
+    build: ./frontend
     container_name: frontend
     ports:
-      - "3000:80"
-    environment:
-      - REACT_APP_API_URL=${REACT_APP_API_URL:-http://localhost:8000}
-      - REACT_APP_WS_URL=${REACT_APP_WS_URL:-ws://localhost:8000/ws}
+      - "80:80"
+      - "443:443"
     depends_on:
       - backend
-    networks:
-      - callcenter
     restart: unless-stopped
 
-  # ============================================
-  # PostgreSQL - База данных
-  # ============================================
+  # PostgreSQL
   postgres:
     image: postgres:15-alpine
     container_name: postgres
-    ports:
-      - "5432:5432"
+    environment:
+      POSTGRES_USER: callcenter
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-securepass123}
+      POSTGRES_DB: callcenter
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backend/init.sql:/docker-entrypoint-initdb.d/init.sql
-    environment:
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_DB=${POSTGRES_DB}
-    networks:
-      - callcenter
     restart: unless-stopped
-
-  # ============================================
-  # Redis - Кэширование (опционально)
-  # ============================================
-  redis:
-    image: redis:7-alpine
-    container_name: redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    networks:
-      - callcenter
-    restart: unless-stopped
-    command: redis-server --appendonly yes
 
 volumes:
   postgres_data:
-  redis_data:
-  freeswitch_storage:
-  call_recordings:
-
-networks:
-  callcenter:
-    driver: bridge
 

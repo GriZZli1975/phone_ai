@@ -1,27 +1,45 @@
--- Инициализация базы данных
--- Создание начальных данных
+-- AI Call Center Database Schema
+-- PostgreSQL 15+
 
--- Создать админа по умолчанию
--- Пароль: changeme123 (хэш bcrypt)
-INSERT INTO operators (name, email, password_hash, department, sip_extension, sip_password, is_active, is_available)
-VALUES (
-    'Администратор',
-    'admin@example.com',
-    '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5aeS7VNLfD/uG',
-    'admin',
-    '100',
-    'pass100',
-    true,
-    true
-)
-ON CONFLICT (email) DO NOTHING;
+CREATE TABLE IF NOT EXISTS calls (
+    id SERIAL PRIMARY KEY,
+    call_id VARCHAR(50) UNIQUE NOT NULL,
+    caller_number VARCHAR(20),
+    called_number VARCHAR(20),
+    start_time TIMESTAMP DEFAULT NOW(),
+    end_time TIMESTAMP,
+    duration INTEGER,
+    recording_path VARCHAR(255),
+    transcription TEXT,
+    department VARCHAR(50),
+    status VARCHAR(20) DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT NOW()
+);
 
--- Правила маршрутизации по умолчанию
-INSERT INTO routing_rules (name, keywords, intent, route_to, priority, is_active)
-VALUES
-    ('Продажи', '["купить", "заказ", "продажа", "стоимость", "цена"]', 'sales', 'sales', 1, true),
-    ('Поддержка', '["проблема", "не работает", "ошибка", "поломка", "помощь"]', 'support', 'support', 2, true),
-    ('Бухгалтерия', '["оплата", "счет", "платеж", "возврат", "деньги"]', 'billing', 'billing', 3, true),
-    ('AI Консультант', '[]', 'ai_consultant', 'ai_consultant', 0, true)
-ON CONFLICT DO NOTHING;
+CREATE INDEX idx_calls_call_id ON calls(call_id);
+CREATE INDEX idx_calls_start_time ON calls(start_time);
+CREATE INDEX idx_calls_status ON calls(status);
+
+-- Operators table
+CREATE TABLE IF NOT EXISTS operators (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(100) UNIQUE,
+    department VARCHAR(50),
+    status VARCHAR(20) DEFAULT 'offline',
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Call logs
+CREATE TABLE IF NOT EXISTS call_logs (
+    id SERIAL PRIMARY KEY,
+    call_id INTEGER REFERENCES calls(id),
+    timestamp TIMESTAMP DEFAULT NOW(),
+    event_type VARCHAR(50),
+    details TEXT
+);
+
+COMMENT ON TABLE calls IS 'Все входящие и исходящие звонки';
+COMMENT ON TABLE operators IS 'Операторы call-центра';
+COMMENT ON TABLE call_logs IS 'Детальные логи событий звонков';
 

@@ -2,28 +2,18 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Установка системных зависимостей
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     gcc \
-    g++ \
-    make \
-    libffi-dev \
-    libssl-dev \
-    ffmpeg \
+    libsndfile1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Копирование requirements
+# Copy requirements
 COPY requirements.txt .
-
-# Установка Python зависимостей
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Копирование кода
+# Copy application code
 COPY . .
 
-# Создание директорий
-RUN mkdir -p /recordings /tmp/audio
-
-# Запуск
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 
