@@ -11,29 +11,10 @@ import numpy as np
 from scipy import signal
 from pathlib import Path
 import os
-import audioop
 
 # Unbuffered output
 sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', buffering=1)
 sys.stderr = os.fdopen(sys.stderr.fileno(), 'w', buffering=1)
-
-
-def ulaw_to_pcm16(ulaw_data: bytes) -> bytes:
-    """
-    Конвертация μ-law → PCM16 (signed linear)
-    """
-    # audioop.ulaw2lin конвертирует μ-law в linear PCM
-    # width=2 означает 16-bit (PCM16)
-    return audioop.ulaw2lin(ulaw_data, 2)
-
-
-def pcm16_to_ulaw(pcm_data: bytes) -> bytes:
-    """
-    Конвертация PCM16 → μ-law для Asterisk
-    """
-    # audioop.lin2ulaw конвертирует linear PCM в μ-law
-    # width=2 означает 16-bit (PCM16)
-    return audioop.lin2ulaw(pcm_data, 2)
 
 
 def resample_8k_to_16k(audio_8k: bytes) -> bytes:
@@ -182,13 +163,11 @@ class AudioSocketServer:
                     if frame_count <= 5 or frame_count % 50 == 0:
                         print(f"[AUDIOSOCKET] Frame #{frame_count}: type={frame_type:02x}, len={length}, data={len(audio_data)} bytes")
                     
-                    # Конвертируем μ-law → PCM16 для лучшего распознавания
+                    # Отправляем μ-law 8kHz напрямую (ElevenLabs принимает)
                     try:
-                        # μ-law → PCM16 (signed linear 16-bit)
-                        pcm_data = ulaw_to_pcm16(audio_data)
-                        await elevenlabs.send_audio(pcm_data)
+                        await elevenlabs.send_audio(audio_data)
                         if frame_count <= 5:
-                            print(f"[ELEVEN] Sent audio chunk #{frame_count}: {len(audio_data)}→{len(pcm_data)} bytes (μ-law→PCM16 8kHz)")
+                            print(f"[ELEVEN] Sent audio chunk #{frame_count}: {len(audio_data)} bytes (μ-law 8kHz)")
                     except Exception as e:
                         print(f"[ELEVEN] Error sending audio: {e}")
                     
@@ -238,24 +217,21 @@ class AudioSocketServer:
             chunks_sent = 0
             
             for offset in range(0, len(full_audio), chunk_size):
-                chunk_pcm = full_audio[offset:offset+chunk_size]
-                
-                # Конвертируем PCM16 → μ-law для Asterisk
-                chunk_ulaw = pcm16_to_ulaw(chunk_pcm)
+                chunk = full_audio[offset:offset+chunk_size]
                 
                 # AudioSocket audio frame: 0x10 + length + data
-                frame = struct.pack('!BH', 0x10, len(chunk_ulaw)) + chunk_ulaw
+                frame = struct.pack('!BH', 0x10, len(chunk)) + chunk
                 writer.write(frame)
                 await writer.drain()
                 
-                total_sent += len(chunk_ulaw)
+                total_sent += len(chunk)
                 chunks_sent += 1
                 
                 # Небольшая задержка между чанками (20ms)
                 await asyncio.sleep(0.02)
                 
                 if chunks_sent <= 3 or chunks_sent % 20 == 0:
-                    print(f"[AUDIOSOCKET] Sent chunk #{chunks_sent}: {len(chunk_pcm)}→{len(chunk_ulaw)} bytes (PCM→μ-law)")
+                    print(f"[AUDIOSOCKET] Sent chunk #{chunks_sent}: {len(chunk)} bytes")
                 
             print(f"[AUDIOSOCKET] ✅ Finished sending {total_sent} bytes in {chunks_sent} chunks to Asterisk")
             
