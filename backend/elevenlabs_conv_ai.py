@@ -120,8 +120,9 @@ class ElevenLabsConvAI:
                 msg_type = data.get('type')
                 
                 if msg_type == 'audio':
-                    # Получили аудио чанк
-                    audio_base64 = data.get('audio', '')
+                    # Получили аудио чанк - вложенная структура!
+                    audio_event = data.get('audio_event', {})
+                    audio_base64 = audio_event.get('audio_base_64', '')
                     if audio_base64:
                         audio_data = base64.b64decode(audio_base64)
                         audio_chunks.append(audio_data)
@@ -129,8 +130,9 @@ class ElevenLabsConvAI:
                             print(f"[ELEVEN] Got audio chunk #{len(audio_chunks)}: {len(audio_data)} bytes")
                         
                 elif msg_type == 'agent_response':
-                    # Ответ агента (может содержать текст)
-                    response_text = data.get('text', '')
+                    # Ответ агента - тоже вложенная структура!
+                    agent_response_event = data.get('agent_response_event', {})
+                    response_text = agent_response_event.get('agent_response', '')
                     if response_text:
                         text += response_text
                         print(f"[ELEVEN] Agent says: {response_text}")

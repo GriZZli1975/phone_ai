@@ -93,20 +93,22 @@ async def test_full_conversation():
                     
                     if msg_type == 'audio':
                         print(f"   Получено: type={msg_type}")
-                        print(f"   Полное сообщение audio: {json.dumps(data)[:200]}...")
-                        audio_b64 = data.get('audio', '')
+                        # Правильная структура: audio_event.audio_base_64
+                        audio_event = data.get('audio_event', {})
+                        audio_b64 = audio_event.get('audio_base_64', '')
                         if audio_b64:
                             audio_chunk = base64.b64decode(audio_b64)
                             audio_chunks.append(audio_chunk)
-                            print(f"   Извлечено {len(audio_chunk)} bytes аудио")
+                            print(f"   ✅ Извлечено {len(audio_chunk)} bytes аудио")
                             
                     elif msg_type == 'agent_response':
                         print(f"   Получено: type=agent_response")
-                        print(f"   Полное сообщение: {json.dumps(data)[:200]}...")
-                        text_content = data.get('text', '')
+                        # Правильная структура: agent_response_event.agent_response
+                        agent_event = data.get('agent_response_event', {})
+                        text_content = agent_event.get('agent_response', '')
                         if text_content:
                             response_text += text_content
-                            print(f"   Текст: {text_content}")
+                            print(f"   ✅ Текст: {text_content}")
                         
                     elif msg_type == 'transcript':
                         text = data.get('text', '')
