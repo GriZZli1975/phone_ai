@@ -18,7 +18,9 @@ services:
   backend:
     build: ./backend
     container_name: backend
-    network_mode: host
+    ports:
+      - "8000:8000"
+      - "9092:9092"
     volumes:
       - ./backend:/app
       - ./recordings:/recordings
@@ -28,7 +30,7 @@ services:
     depends_on:
       - postgres
     environment:
-      - ASTERISK_HOST=127.0.0.1
+      - ASTERISK_HOST=asterisk
       - ASTERISK_ARI_PORT=8088
     command: bash /app/start.sh
 
