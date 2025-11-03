@@ -253,19 +253,11 @@ class AudioSocketServer:
                     chunks_sent = 0
                     continue
                 
-                # ElevenLabs отдаёт PCM16 8kHz, конвертируем в μ-law для Asterisk
-                import audioop
-                try:
-                    ulaw_data = audioop.lin2ulaw(audio_chunk, 2)
-                except Exception as e:
-                    print(f"[AUDIOSOCKET] PCM→μ-law conversion error: {e}")
-                    ulaw_data = audio_chunk
-                
-                # Разбиваем на кадры по 160 байт
-                for offset in range(0, len(ulaw_data), chunk_size):
-                    frame_data = ulaw_data[offset:offset+chunk_size]
+                # Разбиваем большой чанк на мелкие кадры
+                for offset in range(0, len(audio_chunk), chunk_size):
+                    frame_data = audio_chunk[offset:offset+chunk_size]
                     if len(frame_data) < chunk_size:
-                        frame_data = frame_data.ljust(chunk_size, b'\x7f')  # μ-law silence
+                        frame_data = frame_data.ljust(chunk_size, b'\xff')
                     
                     # AudioSocket audio frame: 0x10 + length + data
                     frame = struct.pack('!BH', 0x10, len(frame_data)) + frame_data
@@ -275,8 +267,8 @@ class AudioSocketServer:
                     total_sent += len(frame_data)
                     chunks_sent += 1
                     
-                    # Минимальная задержка для drain
-                    await asyncio.sleep(0.001)
+                    # Задержка 20ms между кадрами
+                    await asyncio.sleep(0.02)
                     
                     if chunks_sent <= 5 or chunks_sent % 50 == 0:
                         print(f"[AUDIOSOCKET] ⬅️ Sent frame #{chunks_sent}: {len(frame_data)} bytes")
