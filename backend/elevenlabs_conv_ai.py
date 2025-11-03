@@ -124,7 +124,13 @@ class ElevenLabsConvAI:
 
         try:
             while True:
-                message = await self.ws.recv()
+                try:
+                    message = await asyncio.wait_for(self.ws.recv(), timeout=0.5)
+                except asyncio.TimeoutError:
+                    if audio_chunks or text:
+                        print(f"[ELEVEN] Timeout waiting for more agent data (collected {len(audio_chunks)} chunks)")
+                        break
+                    continue
                 data = json.loads(message)
 
                 msg_type = data.get('type')
