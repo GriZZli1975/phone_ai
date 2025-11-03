@@ -11,6 +11,7 @@ import numpy as np
 from scipy import signal
 from pathlib import Path
 import os
+import audioop
 
 # Unbuffered output
 sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', buffering=1)
@@ -163,13 +164,23 @@ class AudioSocketServer:
                     if frame_count <= 5 or frame_count % 50 == 0:
                         print(f"[AUDIOSOCKET] Frame #{frame_count}: type={frame_type:02x}, len={length}, data={len(audio_data)} bytes")
                     
-                    # Отправляем μ-law 8kHz напрямую (ElevenLabs принимает)
+                    # Читаем энергетику, чтобы убедиться что аудио не пустое
                     try:
-                        await elevenlabs.send_audio(audio_data)
+                        rms = audioop.rms(audio_data, 2)
+                    except Exception:
+                        rms = 0
+
+                    # Конвертируем PCM16 8kHz → μ-law 8kHz
+                    try:
+                        ulaw_payload = audioop.lin2ulaw(audio_data, 2)
+                        await elevenlabs.send_audio(ulaw_payload)
                         if frame_count <= 5:
-                            print(f"[ELEVEN] Sent audio chunk #{frame_count}: {len(audio_data)} bytes (μ-law 8kHz)")
+                            print(
+                                f"[ELEVEN] Sent audio chunk #{frame_count}: "
+                                f"{len(ulaw_payload)} bytes (PCM16→μ-law, rms={rms})"
+                            )
                     except Exception as e:
-                        print(f"[ELEVEN] Error sending audio: {e}")
+                        print(f"[ELEVEN] Error converting/sending audio: {e}")
                     
                 elif frame_type == 0x00:  # Hangup
                     print(f"[AUDIOSOCKET] Hangup signal received after {frame_count} frames")
