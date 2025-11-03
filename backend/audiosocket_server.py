@@ -53,14 +53,19 @@ class AudioSocketServer:
             return
         
         try:
-            # Отправляем UUID подтверждение (Asterisk AudioSocket protocol)
-            # Формат: 3 байта (0x00, длина UUID, UUID bytes)
-            uuid_bytes = call_id.encode('utf-8')
-            header = struct.pack('!BH', 0x00, len(uuid_bytes))
-            writer.write(header + uuid_bytes)
-            await writer.drain()
+            # Читаем UUID от Asterisk (первые 3 байта: тип + длина)
+            header = await reader.readexactly(3)
+            msg_type, uuid_len = struct.unpack('!BH', header)
             
-            print(f"[AUDIOSOCKET] Sent UUID: {call_id}")
+            if msg_type == 0x00:  # UUID message
+                uuid_bytes = await reader.readexactly(uuid_len)
+                received_uuid = uuid_bytes.decode('utf-8')
+                print(f"[AUDIOSOCKET] Received UUID: {received_uuid}")
+            else:
+                print(f"[AUDIOSOCKET] Unexpected message type: {msg_type}")
+                writer.close()
+                await writer.wait_closed()
+                return
             
             # Задачи для двустороннего стриминга
             receive_task = asyncio.create_task(
