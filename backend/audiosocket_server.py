@@ -86,8 +86,8 @@ from elevenlabs_conv_ai import ElevenLabsConvAI
 
 class AudioSocketServer:
     """
-    AudioSocket сервер для приёма аудио от Asterisk и проксирования в ElevenLabs
-    Формат определяется самим агентом ElevenLabs (см. conversation_initiation_metadata)
+    AudioSocket сервер для приёма аудио от Asterisk
+    Формат: slin16 (PCM 16-bit signed linear, 8000 Hz, mono)
     """
     
     def __init__(self, host='0.0.0.0', port=9092):
@@ -182,25 +182,13 @@ class AudioSocketServer:
                     if frame_count <= 5 or frame_count % 50 == 0:
                         print(f"[AUDIOSOCKET] Frame #{frame_count}: type={frame_type:02x}, len={length}, data={len(audio_data)} bytes")
                     
-                    # Адаптивно приводим формат к ожидаемому ElevenLabs
+                    # Конвертируем μ-law → PCM16 для лучшего распознавания
                     try:
-                        input_fmt = getattr(elevenlabs, "user_input_audio_format", None) or "mulaw_8000"
-
-                        if input_fmt in ("mulaw_8000", "ulaw_8000"):
-                            payload = audio_data
-                        elif input_fmt == "pcm_8000":
-                            payload = ulaw_to_pcm16(audio_data)
-                        elif input_fmt == "pcm_16000":
-                            pcm_data = ulaw_to_pcm16(audio_data)
-                            payload = resample_8k_to_16k(pcm_data)
-                        else:
-                            payload = audio_data
-                            print(f"[ELEVEN] WARN: Unsupported user_input_audio_format '{input_fmt}', forwarding raw bytes")
-
-                        await elevenlabs.send_audio(payload)
-
+                        # μ-law → PCM16 (signed linear 16-bit)
+                        pcm_data = ulaw_to_pcm16(audio_data)
+                        await elevenlabs.send_audio(pcm_data)
                         if frame_count <= 5:
-                            print(f"[ELEVEN] Sent audio chunk #{frame_count}: {len(audio_data)} bytes → format {input_fmt}")
+                            print(f"[ELEVEN] Sent audio chunk #{frame_count}: {len(audio_data)}→{len(pcm_data)} bytes (μ-law→PCM16 8kHz)")
                     except Exception as e:
                         print(f"[ELEVEN] Error sending audio: {e}")
                     
@@ -208,7 +196,7 @@ class AudioSocketServer:
                     print(f"[AUDIOSOCKET] Hangup signal received after {frame_count} frames")
                     # Сигнализируем ElevenLabs что пользователь закончил
                     await elevenlabs.end_user_turn()
-                    print("[AUDIOSOCKET] Sent user_activity to ElevenLabs")
+                    print("[AUDIOSOCKET] Sent user_audio_done to ElevenLabs")
                     break
                 else:
                     print(f"[AUDIOSOCKET] Unknown frame type: {frame_type:02x} (expected 0x10 for audio)")
@@ -240,46 +228,35 @@ class AudioSocketServer:
                 print("[AUDIOSOCKET] No audio to send back")
                 return
                 
-            # Собираем все аудио вместе (в исходном формате агента)
-            full_audio = b"".join(audio_chunks)
-            output_fmt = getattr(elevenlabs, "agent_output_audio_format", None) or "pcm_16000"
-            print(f"[AUDIOSOCKET] Total audio from ElevenLabs: {len(full_audio)} bytes ({output_fmt})")
-
-            # Приводим ответ к μ-law 8kHz для Asterisk
-            if output_fmt in ("mulaw_8000", "ulaw_8000"):
-                audio_for_asterisk = full_audio
-            elif output_fmt == "pcm_8000":
-                audio_for_asterisk = pcm16_to_ulaw(full_audio)
-            elif output_fmt == "pcm_16000":
-                pcm_8k = resample_16k_to_8k(full_audio)
-                audio_for_asterisk = pcm16_to_ulaw(pcm_8k)
-            else:
-                print(f"[AUDIOSOCKET] WARN: Unsupported agent_output_audio_format '{output_fmt}', fallback to pcm_16000 path")
-                pcm_8k = resample_16k_to_8k(full_audio)
-                audio_for_asterisk = pcm16_to_ulaw(pcm_8k)
-
-            # Разбиваем на чанки по 160 байт (20ms μ-law @ 8kHz)
-            chunk_size = 160
+            # Собираем все аудио вместе
+            full_audio = b''.join(audio_chunks)
+            print(f"[AUDIOSOCKET] Total audio from ElevenLabs: {len(full_audio)} bytes (μ-law 8kHz)")
+            
+            # Разбиваем на маленькие чанки по 320 байт (20ms аудио при 8kHz)
+            chunk_size = 320
             total_sent = 0
             chunks_sent = 0
-
-            for offset in range(0, len(audio_for_asterisk), chunk_size):
-                chunk_ulaw = audio_for_asterisk[offset:offset + chunk_size]
-
+            
+            for offset in range(0, len(full_audio), chunk_size):
+                chunk_pcm = full_audio[offset:offset+chunk_size]
+                
+                # Конвертируем PCM16 → μ-law для Asterisk
+                chunk_ulaw = pcm16_to_ulaw(chunk_pcm)
+                
                 # AudioSocket audio frame: 0x10 + length + data
                 frame = struct.pack('!BH', 0x10, len(chunk_ulaw)) + chunk_ulaw
                 writer.write(frame)
                 await writer.drain()
-
+                
                 total_sent += len(chunk_ulaw)
                 chunks_sent += 1
-
+                
                 # Небольшая задержка между чанками (20ms)
                 await asyncio.sleep(0.02)
-
+                
                 if chunks_sent <= 3 or chunks_sent % 20 == 0:
-                    print(f"[AUDIOSOCKET] Sent chunk #{chunks_sent}: {len(chunk_ulaw)} bytes (μ-law)")
-
+                    print(f"[AUDIOSOCKET] Sent chunk #{chunks_sent}: {len(chunk_pcm)}→{len(chunk_ulaw)} bytes (PCM→μ-law)")
+                
             print(f"[AUDIOSOCKET] ✅ Finished sending {total_sent} bytes in {chunks_sent} chunks to Asterisk")
             
         except Exception as e:
