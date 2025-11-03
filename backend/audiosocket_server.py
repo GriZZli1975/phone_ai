@@ -267,8 +267,8 @@ class AudioSocketServer:
                     total_sent += len(frame_data)
                     chunks_sent += 1
                     
-                    # Задержка 10ms между кадрами (для нормальной скорости речи)
-                    await asyncio.sleep(0.01)
+                    # Минимальная задержка только для drain()
+                    # await asyncio.sleep(0.001)  # можно раскомментировать при проблемах
                     
                     if chunks_sent <= 5 or chunks_sent % 50 == 0:
                         print(f"[AUDIOSOCKET] ⬅️ Sent frame #{chunks_sent}: {len(frame_data)} bytes")
