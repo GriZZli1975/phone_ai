@@ -163,12 +163,11 @@ class AudioSocketServer:
                     if frame_count <= 5 or frame_count % 50 == 0:
                         print(f"[AUDIOSOCKET] Frame #{frame_count}: type={frame_type:02x}, len={length}, data={len(audio_data)} bytes")
                     
-                    # Конвертируем 8kHz → 16kHz для ElevenLabs
+                    # Отправляем μ-law 8kHz напрямую (ElevenLabs принимает)
                     try:
-                        audio_16k = resample_8k_to_16k(audio_data)
-                        await elevenlabs.send_audio(audio_16k)
+                        await elevenlabs.send_audio(audio_data)
                         if frame_count <= 5:
-                            print(f"[ELEVEN] Sent audio chunk #{frame_count} ({len(audio_data)}→{len(audio_16k)} bytes, 8k→16k)")
+                            print(f"[ELEVEN] Sent audio chunk #{frame_count}: {len(audio_data)} bytes (μ-law 8kHz)")
                     except Exception as e:
                         print(f"[ELEVEN] Error sending audio: {e}")
                     
@@ -210,19 +209,15 @@ class AudioSocketServer:
                 
             # Собираем все аудио вместе
             full_audio = b''.join(audio_chunks)
-            print(f"[AUDIOSOCKET] Total audio from ElevenLabs: {len(full_audio)} bytes")
+            print(f"[AUDIOSOCKET] Total audio from ElevenLabs: {len(full_audio)} bytes (μ-law 8kHz)")
             
-            # Конвертируем 16kHz → 8kHz
-            audio_8k = resample_16k_to_8k(full_audio)
-            print(f"[AUDIOSOCKET] After conversion to 8kHz: {len(audio_8k)} bytes")
-            
-            # Разбиваем на маленькие чанки по 320 байт (20ms аудио)
+            # Разбиваем на маленькие чанки по 320 байт (20ms аудио при 8kHz)
             chunk_size = 320
             total_sent = 0
             chunks_sent = 0
             
-            for offset in range(0, len(audio_8k), chunk_size):
-                chunk = audio_8k[offset:offset+chunk_size]
+            for offset in range(0, len(full_audio), chunk_size):
+                chunk = full_audio[offset:offset+chunk_size]
                 
                 # AudioSocket audio frame: 0x10 + length + data
                 frame = struct.pack('!BH', 0x10, len(chunk)) + chunk
