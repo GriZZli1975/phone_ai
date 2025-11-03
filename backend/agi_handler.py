@@ -222,12 +222,23 @@ async def handle_call(session: AGISession, call_id: str):
         
         # Генерируем ответ
         response_text = f"Переводю вас в отдел {department}"
-        response_audio = f"/recordings/response_{call_id}.mp3"
-        response_audio_asterisk = f"/var/spool/asterisk/monitor/response_{call_id}"
+        response_mp3 = f"/recordings/response_{call_id}.mp3"
+        response_wav = f"/recordings/response_{call_id}.wav"
+        response_asterisk = f"/var/spool/asterisk/monitor/response_{call_id}"
         
-        if await text_to_speech(response_text, response_audio):
-            # Asterisk автоматически определит формат по содержимому
-            await session.playback(response_audio_asterisk)
+        if await text_to_speech(response_text, response_mp3):
+            # Конвертируем MP3 → WAV для Asterisk
+            try:
+                from pydub import AudioSegment
+                audio = AudioSegment.from_mp3(response_mp3)
+                audio = audio.set_frame_rate(8000).set_channels(1)
+                audio.export(response_wav, format="wav")
+                print(f"[TTS] Converted to WAV: {response_wav}")
+                
+                # Проигрываем WAV (без расширения)
+                await session.playback(response_asterisk)
+            except Exception as e:
+                print(f"[TTS] Conversion error: {e}")
         
         # Здесь можно добавить перевод на оператора
         # await session.send_command(f'EXEC Dial PJSIP/{department}@trunk')
