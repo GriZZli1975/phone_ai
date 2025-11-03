@@ -58,19 +58,9 @@ class AudioSocketServer:
             return
         
         try:
-            # Читаем UUID от Asterisk (первые 3 байта: тип + длина)
-            header = await reader.readexactly(3)
-            msg_type, uuid_len = struct.unpack('!BH', header)
-            
-            if msg_type == 0x00:  # UUID message
-                uuid_bytes = await reader.readexactly(uuid_len)
-                received_uuid = uuid_bytes.decode('utf-8')
-                print(f"[AUDIOSOCKET] Received UUID: {received_uuid}")
-            else:
-                print(f"[AUDIOSOCKET] Unexpected message type: {msg_type}")
-                writer.close()
-                await writer.wait_closed()
-                return
+            # AudioSocket протокол не отправляет UUID первым
+            # Сразу начинаем обработку аудио
+            print(f"[AUDIOSOCKET] Starting audio processing...")
             
             # Задачи для двустороннего стриминга
             receive_task = asyncio.create_task(
