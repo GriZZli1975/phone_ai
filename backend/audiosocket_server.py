@@ -104,15 +104,10 @@ class AudioSocketServer:
                 self.send_to_asterisk(writer, elevenlabs)
             )
             
-            # Ждём завершения любой задачи
-            done, pending = await asyncio.wait(
-                [receive_task, send_task],
-                return_when=asyncio.FIRST_COMPLETED
-            )
+            # Ждём завершения ОБЕИХ задач (полный диалог)
+            await asyncio.gather(receive_task, send_task, return_exceptions=True)
             
-            # Отменяем незавершённые задачи
-            for task in pending:
-                task.cancel()
+            print("[AUDIOSOCKET] Conversation cycle completed")
                 
         except Exception as e:
             print(f"[AUDIOSOCKET] Error: {e}")
