@@ -90,14 +90,24 @@ async def test_full_conversation():
                     data = json.loads(msg)
                     
                     msg_type = data.get('type')
-                    print(f"   Получено: type={msg_type}")
                     
                     if msg_type == 'audio':
+                        print(f"   Получено: type={msg_type}")
+                        print(f"   Полное сообщение audio: {json.dumps(data)[:200]}...")
                         audio_b64 = data.get('audio', '')
                         if audio_b64:
                             audio_chunk = base64.b64decode(audio_b64)
                             audio_chunks.append(audio_chunk)
+                            print(f"   Извлечено {len(audio_chunk)} bytes аудио")
                             
+                    elif msg_type == 'agent_response':
+                        print(f"   Получено: type=agent_response")
+                        print(f"   Полное сообщение: {json.dumps(data)[:200]}...")
+                        text_content = data.get('text', '')
+                        if text_content:
+                            response_text += text_content
+                            print(f"   Текст: {text_content}")
+                        
                     elif msg_type == 'transcript':
                         text = data.get('text', '')
                         response_text += text
@@ -107,9 +117,15 @@ async def test_full_conversation():
                         print("   ✅ Агент закончил отвечать")
                         break
                         
+                    elif msg_type == 'ping':
+                        # Игнорируем ping
+                        pass
+                        
                     elif msg_type == 'error':
                         print(f"   ❌ Ошибка: {data}")
                         break
+                    else:
+                        print(f"   Получено: type={msg_type}")
                         
                 except asyncio.TimeoutError:
                     timeout_count += 1
