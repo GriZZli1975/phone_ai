@@ -7,6 +7,7 @@ import asyncio
 import struct
 import uuid
 import sys
+import time
 import numpy as np
 from scipy import signal
 from pathlib import Path
@@ -64,6 +65,10 @@ except Exception as e:
 
 # Импортируем ElevenLabs Conversational AI
 from elevenlabs_conv_ai import ElevenLabsConvAI
+
+
+SPEECH_RMS_THRESHOLD = int(os.getenv("ELEVENLABS_SPEECH_THRESHOLD", "300"))
+SILENCE_TIMEOUT = float(os.getenv("ELEVENLABS_SILENCE_TIMEOUT", "0.8"))
 
 
 class AudioSocketServer:
@@ -140,6 +145,9 @@ class AudioSocketServer:
             
             print("[AUDIOSOCKET] Now reading audio frames...")
             
+            speaking = False
+            last_voice_ts = time.monotonic()
+
             while True:
                 # Читаем аудио фреймы
                 try:
@@ -181,6 +189,24 @@ class AudioSocketServer:
                             )
                     except Exception as e:
                         print(f"[ELEVEN] Error converting/sending audio: {e}")
+
+                    now = time.monotonic()
+                    if rms >= SPEECH_RMS_THRESHOLD:
+                        if not speaking:
+                            speaking = True
+                            print(f"[AUDIOSOCKET] Voice detected, rms={rms}")
+                        last_voice_ts = now
+                    else:
+                        if speaking and (now - last_voice_ts) >= SILENCE_TIMEOUT:
+                            speaking = False
+                            try:
+                                await elevenlabs.end_user_turn()
+                                print(
+                                    f"[ELEVEN] Sent user_activity after {frame_count} frames "
+                                    f"(silence {now - last_voice_ts:.2f}s)"
+                                )
+                            except Exception as e:
+                                print(f"[ELEVEN] Error sending end_user_turn: {e}")
                     
                 elif frame_type == 0x00:  # Hangup
                     print(f"[AUDIOSOCKET] Hangup signal received after {frame_count} frames")
