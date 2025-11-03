@@ -93,13 +93,18 @@ class AudioSocketServer:
         Получение аудио от Asterisk и отправка в ElevenLabs
         """
         print("[AUDIOSOCKET] Started receiving from Asterisk")
+        frame_count = 0
         
         try:
             while True:
                 # AudioSocket фрейм: 3 байта header + аудио данные
                 # Header: 1 байт тип (0x10=audio), 2 байта длина
-                header = await reader.readexactly(3)
-                
+                try:
+                    header = await asyncio.wait_for(reader.readexactly(3), timeout=0.5)
+                except asyncio.TimeoutError:
+                    # Отправляем silence чтобы Asterisk не отключился
+                    continue
+                    
                 if not header:
                     break
                     
@@ -108,6 +113,10 @@ class AudioSocketServer:
                 if frame_type == 0x10:  # Audio frame
                     # Читаем аудио данные
                     audio_data = await reader.readexactly(length)
+                    frame_count += 1
+                    
+                    if frame_count % 50 == 0:  # Каждые 50 фреймов = ~1 сек
+                        print(f"[AUDIOSOCKET] Received {frame_count} audio frames ({len(audio_data)} bytes each)")
                     
                     # Отправляем в ElevenLabs
                     await elevenlabs.send_audio(audio_data)
@@ -116,11 +125,13 @@ class AudioSocketServer:
                     print("[AUDIOSOCKET] Hangup signal received")
                     await elevenlabs.end_user_turn()
                     break
+                else:
+                    print(f"[AUDIOSOCKET] Unknown frame type: {frame_type}")
                     
         except asyncio.IncompleteReadError:
-            print("[AUDIOSOCKET] Connection closed by Asterisk")
+            print(f"[AUDIOSOCKET] Connection closed by Asterisk (received {frame_count} frames)")
         except Exception as e:
-            print(f"[AUDIOSOCKET] Receive error: {e}")
+            print(f"[AUDIOSOCKET] Receive error: {e} (received {frame_count} frames)")
             
     async def send_to_asterisk(self, writer, elevenlabs: ElevenLabsConvAI):
         """
