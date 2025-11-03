@@ -153,6 +153,8 @@ class AudioSocketServer:
             
     async def run(self):
         """Запуск сервера"""
+        print(f"[AUDIOSOCKET] Starting server on {self.host}:{self.port}...")
+        
         server = await asyncio.start_server(
             self.handle_connection,
             self.host,
@@ -160,7 +162,8 @@ class AudioSocketServer:
         )
         
         addr = server.sockets[0].getsockname()
-        print(f"[AUDIOSOCKET] Listening on {addr}")
+        print(f"[AUDIOSOCKET] ✅ Listening on {addr}")
+        print(f"[AUDIOSOCKET] Waiting for Asterisk connections...")
         
         async with server:
             await server.serve_forever()
