@@ -246,27 +246,29 @@ class AudioSocketServer:
                 
             # Собираем все аудио вместе
             full_audio = b''.join(audio_chunks)
-            output_fmt = getattr(elevenlabs, "agent_output_audio_format", None) or "pcm_8000"
+            output_fmt = getattr(elevenlabs, "agent_output_audio_format", None) or "mulaw_8000"
             print(f"[AUDIOSOCKET] Total audio from ElevenLabs: {len(full_audio)} bytes ({output_fmt})")
 
-            # Приводим ответ к PCM16 8kHz (как ожидает Asterisk)
-            if output_fmt in ("pcm_8000", "slin_8000", "slin16_8000"):
-                audio_pcm = full_audio
-            elif output_fmt in ("mulaw_8000", "ulaw_8000"):
-                audio_pcm = audioop.ulaw2lin(full_audio, 2)
+            # Приводим ответ к μ-law 8kHz (телефония)
+            if output_fmt in ("mulaw_8000", "ulaw_8000"):
+                audio_ulaw = full_audio
+            elif output_fmt in ("pcm_8000", "slin_8000", "slin16_8000"):
+                audio_ulaw = audioop.lin2ulaw(full_audio, 2)
             elif output_fmt == "pcm_16000":
-                audio_pcm = resample_16k_to_8k(full_audio)
+                pcm_8k = resample_16k_to_8k(full_audio)
+                audio_ulaw = audioop.lin2ulaw(pcm_8k, 2)
             else:
-                print(f"[AUDIOSOCKET] WARN: Unsupported agent_output_audio_format '{output_fmt}', converting via resample")
-                audio_pcm = resample_16k_to_8k(full_audio)
+                print(f"[AUDIOSOCKET] WARN: Unsupported agent_output_audio_format '{output_fmt}', converting via resample to μ-law")
+                pcm_8k = resample_16k_to_8k(full_audio)
+                audio_ulaw = audioop.lin2ulaw(pcm_8k, 2)
             
-            # Разбиваем на маленькие чанки по 320 байт (20ms PCM16 @ 8kHz)
-            chunk_size = 320
+            # Разбиваем на маленькие чанки по 160 байт (20ms μ-law @ 8kHz)
+            chunk_size = 160
             total_sent = 0
             chunks_sent = 0
             
-            for offset in range(0, len(audio_pcm), chunk_size):
-                chunk = audio_pcm[offset:offset+chunk_size]
+            for offset in range(0, len(audio_ulaw), chunk_size):
+                chunk = audio_ulaw[offset:offset+chunk_size]
                 
                 # AudioSocket audio frame: 0x10 + length + data
                 frame = struct.pack('!BH', 0x10, len(chunk)) + chunk
@@ -280,7 +282,7 @@ class AudioSocketServer:
                 await asyncio.sleep(0.02)
                 
                 if chunks_sent <= 3 or chunks_sent % 20 == 0:
-                    print(f"[AUDIOSOCKET] Sent chunk #{chunks_sent}: {len(chunk)} bytes (PCM16)")
+                    print(f"[AUDIOSOCKET] Sent chunk #{chunks_sent}: {len(chunk)} bytes (μ-law)")
                 
             print(f"[AUDIOSOCKET] ✅ Finished sending {total_sent} bytes in {chunks_sent} chunks to Asterisk")
             
