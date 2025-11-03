@@ -174,7 +174,7 @@ class AudioSocketServer:
                     try:
                         ulaw_payload = audioop.lin2ulaw(audio_data, 2)
                         await elevenlabs.send_audio(ulaw_payload)
-                        if frame_count <= 5:
+                        if frame_count <= 5 or frame_count % 50 == 0:
                             print(
                                 f"[ELEVEN] Sent audio chunk #{frame_count}: "
                                 f"{len(ulaw_payload)} bytes (PCM16→μ-law, rms={rms})"
