@@ -114,8 +114,18 @@ class AudioSocketServer:
         frame_count = 0
         
         try:
-            # AudioSocket сразу отправляет аудио фреймы без UUID
-            print("[AUDIOSOCKET] Reading audio frames...")
+            # Первый фрейм - UUID (тип 0x01)
+            uuid_header = await reader.readexactly(3)
+            uuid_type, uuid_len = struct.unpack('!BH', uuid_header)
+            
+            if uuid_type == 0x01:  # UUID frame
+                uuid_bytes = await reader.readexactly(uuid_len)
+                uuid_str = uuid_bytes.decode('utf-8')
+                print(f"[AUDIOSOCKET] Received UUID: {uuid_str}")
+            else:
+                print(f"[AUDIOSOCKET] WARNING: Expected UUID type 0x01, got {uuid_type:02x}")
+            
+            print("[AUDIOSOCKET] Now reading audio frames...")
             
             while True:
                 # Читаем аудио фреймы
