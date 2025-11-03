@@ -96,27 +96,41 @@ class AudioSocketServer:
         frame_count = 0
         
         try:
+            # Первое сообщение - UUID от Asterisk
+            first = await reader.readexactly(3)
+            msg_type, msg_len = struct.unpack('!BH', first)
+            print(f"[AUDIOSOCKET] First message: type={msg_type:02x}, len={msg_len}")
+            
+            if msg_type == 0x00:  # UUID
+                uuid_data = await reader.readexactly(msg_len)
+                uuid_str = uuid_data.decode('utf-8')
+                print(f"[AUDIOSOCKET] Got UUID: {uuid_str}")
+            else:
+                print(f"[AUDIOSOCKET] WARNING: Expected UUID (0x00), got type {msg_type:02x}")
+            
             while True:
-                # AudioSocket фрейм: 3 байта header + аудио данные
-                # Header: 1 байт тип (0x10=audio), 2 байта длина
+                # Читаем аудио фреймы
                 try:
                     header = await asyncio.wait_for(reader.readexactly(3), timeout=0.5)
                 except asyncio.TimeoutError:
-                    # Отправляем silence чтобы Asterisk не отключился
+                    # Отправляем тишину чтобы держать соединение
+                    silence = struct.pack('!BH', 0x10, 160) + (b'\x00' * 160)
+                    writer.write(silence)
+                    await writer.drain()
                     continue
                     
-                if not header:
+                if not header or len(header) < 3:
                     break
                     
                 frame_type, length = struct.unpack('!BH', header)
                 
-                if frame_type == 0x10:  # Audio frame
+                if frame_type == 0x10:  # Audio frame (0x10 = 16)
                     # Читаем аудио данные
                     audio_data = await reader.readexactly(length)
                     frame_count += 1
                     
-                    if frame_count % 50 == 0:  # Каждые 50 фреймов = ~1 сек
-                        print(f"[AUDIOSOCKET] Received {frame_count} audio frames ({len(audio_data)} bytes each)")
+                    if frame_count <= 5 or frame_count % 50 == 0:
+                        print(f"[AUDIOSOCKET] Frame #{frame_count}: type={frame_type:02x}, len={length}, data={len(audio_data)} bytes")
                     
                     # Отправляем в ElevenLabs
                     await elevenlabs.send_audio(audio_data)
@@ -126,7 +140,7 @@ class AudioSocketServer:
                     await elevenlabs.end_user_turn()
                     break
                 else:
-                    print(f"[AUDIOSOCKET] Unknown frame type: {frame_type}")
+                    print(f"[AUDIOSOCKET] Unknown frame type: {frame_type:02x} (expected 0x10 for audio)")
                     
         except asyncio.IncompleteReadError:
             print(f"[AUDIOSOCKET] Connection closed by Asterisk (received {frame_count} frames)")
