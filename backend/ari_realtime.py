@@ -54,7 +54,11 @@ class ARIRealtimeHandler:
         print(f"[ARI] Connecting to ws://{ASTERISK_HOST}:{ASTERISK_ARI_PORT}/ari/events?app=realtime_ai&api_key=***")
         
         try:
-            self.ari_ws = await websockets.connect(ari_url)
+            # WebSocket с subprotocol "ari" как требует Asterisk
+            self.ari_ws = await websockets.connect(
+                ari_url,
+                subprotocols=["ari"]
+            )
             print("[ARI] ✅ Connected to Asterisk ARI")
             return True
         except Exception as e:
