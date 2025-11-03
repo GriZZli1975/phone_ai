@@ -43,6 +43,8 @@ class ElevenLabsConvAI:
         self.agent_id = agent_id or ELEVENLABS_AGENT_ID
         self.ws = None
         self.conversation_id = None
+        self.user_input_audio_format = None
+        self.agent_output_audio_format = None
         
     async def connect(self):
         """Подключение к ElevenLabs Conversational AI"""
@@ -69,9 +71,11 @@ class ElevenLabsConvAI:
             if welcome_data.get('type') == 'conversation_initiation_metadata':
                 metadata = welcome_data.get('conversation_initiation_metadata_event', {})
                 self.conversation_id = metadata.get('conversation_id')
-                audio_format = metadata.get('user_input_audio_format')
+                self.user_input_audio_format = metadata.get('user_input_audio_format')
+                self.agent_output_audio_format = metadata.get('agent_output_audio_format')
                 print(f"[ELEVEN] Conversation ID: {self.conversation_id}")
-                print(f"[ELEVEN] Audio format: {audio_format}")
+                print(f"[ELEVEN] User input format: {self.user_input_audio_format}")
+                print(f"[ELEVEN] Agent output format: {self.agent_output_audio_format}")
             
             return True
             

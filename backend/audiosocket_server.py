@@ -246,15 +246,29 @@ class AudioSocketServer:
                 
             # Собираем все аудио вместе
             full_audio = b''.join(audio_chunks)
-            print(f"[AUDIOSOCKET] Total audio from ElevenLabs: {len(full_audio)} bytes (μ-law 8kHz)")
+            output_fmt = getattr(elevenlabs, "agent_output_audio_format", None) or "mulaw_8000"
+            print(f"[AUDIOSOCKET] Total audio from ElevenLabs: {len(full_audio)} bytes ({output_fmt})")
+
+            # Приводим ответ к μ-law 8kHz для Asterisk
+            if output_fmt in ("mulaw_8000", "ulaw_8000"):
+                audio_ulaw = full_audio
+            elif output_fmt == "pcm_8000":
+                audio_ulaw = audioop.lin2ulaw(full_audio, 2)
+            elif output_fmt == "pcm_16000":
+                pcm_8k = resample_16k_to_8k(full_audio)
+                audio_ulaw = audioop.lin2ulaw(pcm_8k, 2)
+            else:
+                print(f"[AUDIOSOCKET] WARN: Unsupported agent_output_audio_format '{output_fmt}', falling back via resample")
+                pcm_8k = resample_16k_to_8k(full_audio)
+                audio_ulaw = audioop.lin2ulaw(pcm_8k, 2)
             
-            # Разбиваем на маленькие чанки по 320 байт (20ms аудио при 8kHz)
-            chunk_size = 320
+            # Разбиваем на маленькие чанки по 160 байт (20ms μ-law @ 8kHz)
+            chunk_size = 160
             total_sent = 0
             chunks_sent = 0
             
-            for offset in range(0, len(full_audio), chunk_size):
-                chunk = full_audio[offset:offset+chunk_size]
+            for offset in range(0, len(audio_ulaw), chunk_size):
+                chunk = audio_ulaw[offset:offset+chunk_size]
                 
                 # AudioSocket audio frame: 0x10 + length + data
                 frame = struct.pack('!BH', 0x10, len(chunk)) + chunk
@@ -268,7 +282,7 @@ class AudioSocketServer:
                 await asyncio.sleep(0.02)
                 
                 if chunks_sent <= 3 or chunks_sent % 20 == 0:
-                    print(f"[AUDIOSOCKET] Sent chunk #{chunks_sent}: {len(chunk)} bytes")
+                    print(f"[AUDIOSOCKET] Sent chunk #{chunks_sent}: {len(chunk)} bytes (μ-law)")
                 
             print(f"[AUDIOSOCKET] ✅ Finished sending {total_sent} bytes in {chunks_sent} chunks to Asterisk")
             
