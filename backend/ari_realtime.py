@@ -45,13 +45,23 @@ class ARIRealtimeHandler:
         
     async def connect_ari(self):
         """Подключение к Asterisk ARI WebSocket"""
-        ari_url = f"ws://{ASTERISK_HOST}:{ASTERISK_ARI_PORT}/ari/events"
-        ari_url += f"?app=realtime_ai&api_key={ASTERISK_ARI_USER}:{ASTERISK_ARI_PASSWORD}"
+        import base64
+        
+        # Формируем URL
+        ari_url = f"ws://{ASTERISK_HOST}:{ASTERISK_ARI_PORT}/ari/events?app=realtime_ai"
+        
+        # Basic Auth для WebSocket
+        credentials = f"{ASTERISK_ARI_USER}:{ASTERISK_ARI_PASSWORD}"
+        auth_header = base64.b64encode(credentials.encode()).decode()
+        
+        headers = {
+            "Authorization": f"Basic {auth_header}"
+        }
         
         print(f"[ARI] Connecting to {ari_url}")
         
         try:
-            self.ari_ws = await websockets.connect(ari_url)
+            self.ari_ws = await websockets.connect(ari_url, extra_headers=headers)
             print("[ARI] Connected to Asterisk")
             return True
         except Exception as e:
