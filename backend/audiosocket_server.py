@@ -152,15 +152,29 @@ class AudioSocketServer:
                     if frame_count <= 5 or frame_count % 50 == 0:
                         print(f"[AUDIOSOCKET] Frame #{frame_count}: type={frame_type:02x}, len={length}, data={len(audio_data)} bytes")
                     
-                    # Отправляем в ElevenLabs
-                    await elevenlabs.send_audio(audio_data)
+                    # TODO: Конвертировать 8kHz → 16kHz если нужно
+                    # Пока отправляем как есть
+                    try:
+                        await elevenlabs.send_audio(audio_data)
+                        if frame_count <= 5:
+                            print(f"[ELEVEN] Sent audio chunk #{frame_count} to ElevenLabs")
+                    except Exception as e:
+                        print(f"[ELEVEN] Error sending audio: {e}")
                     
                 elif frame_type == 0x00:  # Hangup
-                    print("[AUDIOSOCKET] Hangup signal received")
+                    print(f"[AUDIOSOCKET] Hangup signal received after {frame_count} frames")
+                    # Сигнализируем ElevenLabs что пользователь закончил
                     await elevenlabs.end_user_turn()
+                    print("[AUDIOSOCKET] Sent user_audio_done to ElevenLabs")
                     break
                 else:
                     print(f"[AUDIOSOCKET] Unknown frame type: {frame_type:02x} (expected 0x10 for audio)")
+                    
+            # Когда цикл завершился, сигнализируем конец (если не было hangup)
+            if frame_count > 0:
+                print(f"[AUDIOSOCKET] Total frames received: {frame_count}")
+                await elevenlabs.end_user_turn()
+                print("[AUDIOSOCKET] Waiting for ElevenLabs response...")
                     
         except asyncio.IncompleteReadError:
             print(f"[AUDIOSOCKET] Connection closed by Asterisk (received {frame_count} frames)")
