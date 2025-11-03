@@ -139,6 +139,20 @@ class ElevenLabsConvAI:
                         text += response_text
                         print(f"[ELEVEN] Agent says: {response_text}")
                     
+                elif msg_type == 'user_transcript':
+                    # Транскрипция речи ПОЛЬЗОВАТЕЛЯ!
+                    user_event = data.get('user_transcription_event', {})
+                    user_text = user_event.get('user_transcript', '')
+                    if user_text:
+                        print(f"[ELEVEN] 👤 USER said: {user_text}")
+                        
+                elif msg_type == 'vad_score':
+                    # Voice Activity Detection
+                    vad_event = data.get('vad_score_event', {})
+                    vad_value = vad_event.get('vad_score', 0)
+                    if vad_value > 0.5:
+                        print(f"[ELEVEN] 🎤 Voice detected: {vad_value}")
+                    
                 elif msg_type == 'transcript':
                     # Альтернативный формат текста
                     transcript_text = data.get('text', '')
