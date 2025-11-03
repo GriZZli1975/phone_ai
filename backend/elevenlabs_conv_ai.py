@@ -107,14 +107,14 @@ class ElevenLabsConvAI:
     async def receive_response(self):
         """
         Получение ответа от ElevenLabs
-        Возвращает: (text, audio_chunks, is_final)
+        Возвращает: (text, audio_chunks)
         """
         text = ""
         audio_chunks = []
         
         try:
             while True:
-                message = await asyncio.wait_for(self.ws.recv(), timeout=10.0)
+                message = await asyncio.wait_for(self.ws.recv(), timeout=1.0)
                 data = json.loads(message)
                 
                 msg_type = data.get('type')
@@ -125,23 +125,40 @@ class ElevenLabsConvAI:
                     if audio_base64:
                         audio_data = base64.b64decode(audio_base64)
                         audio_chunks.append(audio_data)
+                        if len(audio_chunks) <= 3:
+                            print(f"[ELEVEN] Got audio chunk #{len(audio_chunks)}: {len(audio_data)} bytes")
                         
+                elif msg_type == 'agent_response':
+                    # Ответ агента (может содержать текст)
+                    response_text = data.get('text', '')
+                    if response_text:
+                        text += response_text
+                        print(f"[ELEVEN] Agent says: {response_text}")
+                    
                 elif msg_type == 'transcript':
-                    # Получили текст ответа
-                    text = data.get('text', '')
-                    print(f"[ELEVEN] Agent says: {text}")
+                    # Альтернативный формат текста
+                    transcript_text = data.get('text', '')
+                    if transcript_text:
+                        text += transcript_text
+                        print(f"[ELEVEN] Transcript: {transcript_text}")
                     
                 elif msg_type == 'agent_response_end':
                     # Агент закончил отвечать
-                    print("[ELEVEN] Agent response complete")
+                    print(f"[ELEVEN] Agent response complete: {len(audio_chunks)} audio chunks")
                     break
+                    
+                elif msg_type == 'ping':
+                    # Keepalive - игнорируем
+                    pass
                     
                 elif msg_type == 'error':
                     print(f"[ELEVEN] Error: {data}")
                     break
                     
         except asyncio.TimeoutError:
-            print("[ELEVEN] Timeout waiting for response")
+            # Таймаут - возвращаем что есть
+            if audio_chunks:
+                print(f"[ELEVEN] Timeout, but got {len(audio_chunks)} audio chunks")
             
         return text, audio_chunks
         
