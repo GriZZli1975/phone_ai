@@ -213,22 +213,37 @@ class AudioSocketServer:
                 print("[AUDIOSOCKET] No audio to send back")
                 return
                 
-            # Отправляем каждый аудио чанк в Asterisk
+            # Собираем все аудио вместе
+            full_audio = b''.join(audio_chunks)
+            print(f"[AUDIOSOCKET] Total audio from ElevenLabs: {len(full_audio)} bytes")
+            
+            # Конвертируем 16kHz → 8kHz
+            audio_8k = resample_16k_to_8k(full_audio)
+            print(f"[AUDIOSOCKET] After conversion to 8kHz: {len(audio_8k)} bytes")
+            
+            # Разбиваем на маленькие чанки по 320 байт (20ms аудио)
+            chunk_size = 320
             total_sent = 0
-            for i, chunk in enumerate(audio_chunks):
-                # Конвертируем 16kHz → 8kHz для Asterisk
-                chunk_8k = resample_16k_to_8k(chunk)
+            chunks_sent = 0
+            
+            for offset in range(0, len(audio_8k), chunk_size):
+                chunk = audio_8k[offset:offset+chunk_size]
                 
                 # AudioSocket audio frame: 0x10 + length + data
-                frame = struct.pack('!BH', 0x10, len(chunk_8k)) + chunk_8k
+                frame = struct.pack('!BH', 0x10, len(chunk)) + chunk
                 writer.write(frame)
                 await writer.drain()
-                total_sent += len(chunk_8k)
                 
-                if i < 3 or i % 20 == 0:
-                    print(f"[AUDIOSOCKET] Sent chunk #{i+1}: {len(chunk)}→{len(chunk_8k)} bytes (16k→8k)")
+                total_sent += len(chunk)
+                chunks_sent += 1
                 
-            print(f"[AUDIOSOCKET] Finished sending {total_sent} bytes audio to Asterisk")
+                # Небольшая задержка между чанками (20ms)
+                await asyncio.sleep(0.02)
+                
+                if chunks_sent <= 3 or chunks_sent % 20 == 0:
+                    print(f"[AUDIOSOCKET] Sent chunk #{chunks_sent}: {len(chunk)} bytes")
+                
+            print(f"[AUDIOSOCKET] ✅ Finished sending {total_sent} bytes in {chunks_sent} chunks to Asterisk")
             
         except Exception as e:
             print(f"[AUDIOSOCKET] Send error: {e}")
