@@ -130,6 +130,7 @@ class AudioSocketServer:
             print(f"[AUDIOSOCKET] Error: {e}")
         finally:
             # Проверяем очередь перевода перед закрытием
+            print(f"[AUDIOSOCKET] DEBUG: Checking transfer queue (empty={elevenlabs.transfer_queue.empty()})")
             transfer_dept = None
             if not elevenlabs.transfer_queue.empty():
                 try:
@@ -140,6 +141,8 @@ class AudioSocketServer:
                     print(f"[AUDIOSOCKET] ⚠️ Transfer via Asterisk AMI not yet implemented - call will end")
                 except Exception as ex:
                     print(f"[AUDIOSOCKET] Transfer check error: {ex}")
+            else:
+                print(f"[AUDIOSOCKET] DEBUG: No transfer in queue")
             
             await elevenlabs.close()
             writer.close()
