@@ -129,20 +129,17 @@ class AudioSocketServer:
         except Exception as e:
             print(f"[AUDIOSOCKET] Error: {e}")
         finally:
-            # Проверяем очередь перевода перед закрытием
-            print(f"[AUDIOSOCKET] DEBUG: Checking transfer queue (empty={elevenlabs.transfer_queue.empty()})")
-            transfer_dept = None
-            if not elevenlabs.transfer_queue.empty():
-                try:
-                    transfer_dept = elevenlabs.transfer_queue.get_nowait()
-                    print(f"[AUDIOSOCKET] 🔀 Transfer requested to department: {transfer_dept}")
-                    sip_uri = DEPARTMENT_EXTENSIONS.get(transfer_dept, DEPARTMENT_EXTENSIONS['sales'])
-                    print(f"[AUDIOSOCKET] 📞 Transfer destination: {sip_uri}")
-                    print(f"[AUDIOSOCKET] ⚠️ Transfer via Asterisk AMI not yet implemented - call will end")
-                except Exception as ex:
-                    print(f"[AUDIOSOCKET] Transfer check error: {ex}")
+            # Проверяем атрибут перевода (надёжнее чем очередь)
+            transfer_dept = getattr(elevenlabs, 'transfer_department', None)
+            print(f"[AUDIOSOCKET] DEBUG: transfer_department = {transfer_dept}")
+            
+            if transfer_dept:
+                print(f"[AUDIOSOCKET] 🔀 Transfer requested to department: {transfer_dept}")
+                sip_uri = DEPARTMENT_EXTENSIONS.get(transfer_dept, DEPARTMENT_EXTENSIONS['sales'])
+                print(f"[AUDIOSOCKET] 📞 Transfer destination: {sip_uri}")
+                print(f"[AUDIOSOCKET] ⚠️ Transfer via Asterisk AMI not yet implemented - call will end")
             else:
-                print(f"[AUDIOSOCKET] DEBUG: No transfer in queue")
+                print(f"[AUDIOSOCKET] DEBUG: No transfer requested")
             
             await elevenlabs.close()
             writer.close()

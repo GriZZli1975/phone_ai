@@ -45,6 +45,7 @@ class ElevenLabsConvAI:
         self.conversation_id = None
         self.audio_queue = None
         self.transfer_queue = None
+        self.transfer_department = None  # Простой атрибут для перевода
         
     async def connect(self):
         """Подключение к ElevenLabs Conversational AI"""
@@ -179,8 +180,9 @@ class ElevenLabsConvAI:
                         department = params.get('department', 'sales')
                         print(f"[ELEVEN] ⚡ TRANSFER REQUEST to department: {department}")
                         
-                        # Кладём в очередь для обработки в audiosocket_server
-                        await self.transfer_queue.put(department)
+                        # Сохраняем в атрибут (надёжнее чем очередь)
+                        self.transfer_department = department
+                        await self.transfer_queue.put(department)  # Дублируем в очередь
                         
                         # Отправляем успешный результат обратно в ElevenLabs
                         result_msg = {
