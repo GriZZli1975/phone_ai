@@ -126,8 +126,12 @@ async def transfer_call(key: str, department: str):
     
     # Вызов Mango API
     try:
-        api_key = os.getenv('MANGO_API_KEY')
-        api_salt = os.getenv('MANGO_API_SALT')
+        api_key = os.getenv('MANGO_API_KEY', '')
+        api_salt = os.getenv('MANGO_API_SALT', '')
+        
+        if not api_key or not api_salt:
+            print(f"[MANGO] ERROR: MANGO_API_KEY or MANGO_API_SALT not configured", flush=True)
+            return {"status": "error", "message": "Mango API keys not configured"}
         
         params = {
             "call_id": call_id,
