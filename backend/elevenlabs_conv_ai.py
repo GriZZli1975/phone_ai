@@ -46,7 +46,8 @@ class ElevenLabsConvAI:
         self.conversation_id = None
         self.audio_queue = None
         self.transfer_queue = None
-        self.transfer_department = None  # Простой атрибут для перевода
+        self.transfer_department = None
+        self.caller_number = None  # Номер звонящего из Asterisk
         
     async def connect(self):
         """Подключение к ElevenLabs Conversational AI"""
@@ -187,13 +188,14 @@ class ElevenLabsConvAI:
                         
                         # Вызываем FastAPI endpoint для перевода через Mango
                         try:
-                            # Используем conversation_id как ключ (пока нет caller_number)
+                            # Используем caller_number если есть, иначе conversation_id
+                            key = self.caller_number or self.conversation_id
                             async with httpx.AsyncClient() as client:
                                 resp = await client.post(
-                                    f"http://localhost:8000/api/transfer/{self.conversation_id}/{department}",
+                                    f"http://localhost:8000/api/transfer/{key}/{department}",
                                     timeout=2.0
                                 )
-                            print(f"[ELEVEN] 📞 Transfer API called: {resp.status_code}", flush=True)
+                            print(f"[ELEVEN] 📞 Transfer API called (key={key}): {resp.status_code}", flush=True)
                         except Exception as e:
                             print(f"[ELEVEN] Transfer API error: {e}", flush=True)
                         

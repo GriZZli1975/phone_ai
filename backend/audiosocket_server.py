@@ -173,9 +173,15 @@ class AudioSocketServer:
             
             if uuid_type == 0x01:  # UUID frame
                 uuid_bytes = await reader.readexactly(uuid_len)
-                # UUID - это 16 байт в hex формате, не UTF-8 строка
-                uuid_hex = uuid_bytes.hex()
-                print(f"[AUDIOSOCKET] Received UUID: {uuid_hex} ({uuid_len} bytes)")
+                # Пробуем декодировать как строку (может быть caller_number)
+                try:
+                    caller_number = uuid_bytes.decode('utf-8').strip()
+                    print(f"[AUDIOSOCKET] Received caller number: {caller_number}")
+                    elevenlabs.caller_number = caller_number
+                except:
+                    # Fallback: hex формат
+                    uuid_hex = uuid_bytes.hex()
+                    print(f"[AUDIOSOCKET] Received UUID: {uuid_hex}")
             else:
                 print(f"[AUDIOSOCKET] WARNING: Expected UUID type 0x01, got {uuid_type:02x}")
             
