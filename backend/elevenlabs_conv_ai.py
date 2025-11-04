@@ -9,6 +9,7 @@ import os
 import base64
 from pathlib import Path
 import websockets
+import httpx
 
 # Manual .env loading
 try:
@@ -180,9 +181,21 @@ class ElevenLabsConvAI:
                         department = params.get('department', 'sales')
                         print(f"[ELEVEN] ⚡ TRANSFER REQUEST to department: {department}")
                         
-                        # Сохраняем в атрибут (надёжнее чем очередь)
+                        # Сохраняем в атрибут
                         self.transfer_department = department
-                        await self.transfer_queue.put(department)  # Дублируем в очередь
+                        await self.transfer_queue.put(department)
+                        
+                        # Вызываем FastAPI endpoint для перевода через Mango
+                        try:
+                            # Используем conversation_id как ключ (пока нет caller_number)
+                            async with httpx.AsyncClient() as client:
+                                resp = await client.post(
+                                    f"http://localhost:8000/api/transfer/{self.conversation_id}/{department}",
+                                    timeout=2.0
+                                )
+                            print(f"[ELEVEN] 📞 Transfer API called: {resp.status_code}", flush=True)
+                        except Exception as e:
+                            print(f"[ELEVEN] Transfer API error: {e}", flush=True)
                         
                         # Отправляем успешный результат обратно в ElevenLabs
                         result_msg = {
