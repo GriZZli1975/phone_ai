@@ -139,9 +139,12 @@ async def transfer_call(key: str, department: str):
             "command_id": f"transfer_{call_id}"
         }
         
-        # Подпись
-        sign_str = json.dumps(params, separators=(',', ':')) + api_key + api_salt
-        sign = hashlib.sha256(sign_str.encode()).hexdigest()
+        # Подпись по документации Mango: JSON (без пробелов) + api_key + api_salt
+        json_str = json.dumps(params, ensure_ascii=False, separators=(',', ':'), sort_keys=True)
+        sign_str = json_str + api_key + api_salt
+        sign = hashlib.sha256(sign_str.encode('utf-8')).hexdigest()
+        
+        print(f"[MANGO] DEBUG: Calling transfer API with call_id={call_id}, to={to_number}", flush=True)
         
         async with httpx.AsyncClient() as client:
             response = await client.post(
