@@ -139,18 +139,21 @@ async def transfer_call(key: str, department: str):
             "command_id": f"transfer_{call_id}"
         }
         
-        # Подпись по документации Mango: JSON (без пробелов) + api_key + api_salt
-        json_str = json.dumps(params, ensure_ascii=False, separators=(',', ':'), sort_keys=True)
+        # Подпись: JSON + key + salt (без sort_keys!)
+        json_str = json.dumps(params, ensure_ascii=False, separators=(',', ':'))
         sign_str = json_str + api_key + api_salt
         sign = hashlib.sha256(sign_str.encode('utf-8')).hexdigest()
         
-        print(f"[MANGO] DEBUG: Calling transfer API with call_id={call_id}, to={to_number}", flush=True)
+        print(f"[MANGO] DEBUG: json_str={json_str}", flush=True)
+        print(f"[MANGO] DEBUG: sign={sign[:20]}...", flush=True)
+        print(f"[MANGO] Calling transfer: call_id={call_id}, to={to_number}", flush=True)
         
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 "https://app.mango-office.ru/vpbx/commands/transfer",
                 json=params,
-                headers={"sign": sign}
+                headers={"sign": sign},
+                timeout=10.0
             )
         
         print(f"[MANGO] Transfer response: {response.status_code} {response.text}", flush=True)
