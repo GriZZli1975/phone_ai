@@ -183,8 +183,8 @@ class ElevenLabsConvAI:
                     break
                 
                 else:
-                    # Логируем неизвестные события
-                    print(f"[ELEVEN] Unknown event: {msg_type}")
+                    # Логируем неизвестные события (включая agent_tool_response)
+                    print(f"[ELEVEN] Unknown event: {msg_type} -> {json.dumps(data, ensure_ascii=False)[:200]}")
 
         except websockets.ConnectionClosed as exc:
             print(f"[ELEVEN] Connection closed: {exc}")
