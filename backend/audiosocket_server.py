@@ -113,8 +113,19 @@ class AudioSocketServer:
                 elevenlabs.stream_responses()
             )
             
-            # Ждём завершения ВСЕХ задач (полный диалог)
-            await asyncio.gather(receive_task, send_task, stream_task, return_exceptions=True)
+            # Ждём завершения задач
+            done, pending = await asyncio.wait(
+                {receive_task, send_task, stream_task},
+                return_when=asyncio.FIRST_COMPLETED
+            )
+            
+            # Отменяем оставшиеся задачи (экономим кредиты)
+            for task in pending:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
             
             print("[AUDIOSOCKET] Conversation cycle completed")
                 
