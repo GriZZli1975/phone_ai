@@ -169,6 +169,16 @@ class AudioSocketServer:
             last_voice_ts = time.monotonic()
 
             while True:
+                # Проверяем запрос на перевод (не блокирующая проверка)
+                if not elevenlabs.transfer_queue.empty():
+                    try:
+                        transfer_dept = elevenlabs.transfer_queue.get_nowait()
+                        print(f"[AUDIOSOCKET] 📞 Transfer requested to: {transfer_dept}")
+                        # Прерываем цикл для выполнения перевода
+                        return transfer_dept
+                    except:
+                        pass
+                
                 # Читаем аудио фреймы
                 try:
                     header = await asyncio.wait_for(reader.readexactly(3), timeout=0.5)
@@ -237,23 +247,13 @@ class AudioSocketServer:
                 else:
                     print(f"[AUDIOSOCKET] Unknown frame type: {frame_type:02x} (expected 0x10 for audio)")
                     
-            # Проверяем, был ли запрос на перевод
-            transfer_dept = None
-            if not elevenlabs.transfer_queue.empty():
-                try:
-                    transfer_dept = elevenlabs.transfer_queue.get_nowait()
-                    print(f"[AUDIOSOCKET] 📞 Transfer requested to: {transfer_dept}")
-                except:
-                    pass
-            
-            # Когда цикл завершился, сигнализируем конец (если не было hangup и нет перевода)
-            if frame_count > 0 and not transfer_dept:
+            # Когда цикл завершился обычным способом (hangup, не перевод)
+            if frame_count > 0:
                 print(f"[AUDIOSOCKET] Total frames received: {frame_count}")
                 await elevenlabs.end_user_turn()
                 print("[AUDIOSOCKET] Waiting for ElevenLabs response...")
             
-            # Возвращаем department для перевода (если был запрос)
-            return transfer_dept
+            return None
                     
         except asyncio.IncompleteReadError:
             print(f"[AUDIOSOCKET] Connection closed by Asterisk (received {frame_count} frames)")
