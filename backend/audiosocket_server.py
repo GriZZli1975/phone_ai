@@ -129,6 +129,11 @@ class AudioSocketServer:
         except Exception as e:
             print(f"[AUDIOSOCKET] Error: {e}")
         finally:
+            import sys
+            sys.stdout.flush()
+            sys.stderr.flush()
+            print(f"\n\n[AUDIOSOCKET] ========== FINALLY BLOCK EXECUTING ==========\n", flush=True)
+            
             # Проверяем атрибут перевода
             transfer_dept = getattr(elevenlabs, 'transfer_department', None)
             print(f"[AUDIOSOCKET] ===FINALLY=== transfer_department = {transfer_dept}", flush=True)
