@@ -124,8 +124,12 @@ class AudioSocketServer:
             # Ждём завершения ВСЕХ задач
             results = await asyncio.gather(receive_task, send_task, stream_task, return_exceptions=True)
             
+            # Отладка: что вернулось из задач
+            print(f"[AUDIOSOCKET] DEBUG: results = {results}")
+            
             # Проверяем, был ли запрос на перевод (возвращается из receive_from_asterisk)
             transfer_dept = results[0] if results and results[0] and not isinstance(results[0], Exception) else None
+            print(f"[AUDIOSOCKET] DEBUG: transfer_dept = {transfer_dept}")
             
             if transfer_dept:
                 print(f"[AUDIOSOCKET] 🔀 Transfer requested to department: {transfer_dept}")
