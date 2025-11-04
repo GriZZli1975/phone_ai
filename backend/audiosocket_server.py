@@ -129,18 +129,24 @@ class AudioSocketServer:
         except Exception as e:
             print(f"[AUDIOSOCKET] Error: {e}")
         finally:
-            print(f"[AUDIOSOCKET] ========== FINALLY BLOCK STARTED ==========")
-            # Проверяем атрибут перевода (надёжнее чем очередь)
+            # Проверяем атрибут перевода
             transfer_dept = getattr(elevenlabs, 'transfer_department', None)
-            print(f"[AUDIOSOCKET] DEBUG: transfer_department = {transfer_dept}")
             
             if transfer_dept:
                 print(f"[AUDIOSOCKET] 🔀 Transfer requested to department: {transfer_dept}")
                 sip_uri = DEPARTMENT_EXTENSIONS.get(transfer_dept, DEPARTMENT_EXTENSIONS['sales'])
                 print(f"[AUDIOSOCKET] 📞 Transfer destination: {sip_uri}")
-                print(f"[AUDIOSOCKET] ⚠️ Transfer via Asterisk AMI not yet implemented - call will end")
+                
+                # Записываем команду перевода в файл для Asterisk
+                transfer_file = f"/tmp/transfer_{call_id}"
+                try:
+                    with open(transfer_file, 'w') as f:
+                        f.write(f"{sip_uri}\n")
+                    print(f"[AUDIOSOCKET] ✅ Transfer file created: {transfer_file}")
+                except Exception as e:
+                    print(f"[AUDIOSOCKET] ❌ Failed to create transfer file: {e}")
             else:
-                print(f"[AUDIOSOCKET] DEBUG: No transfer requested")
+                print(f"[AUDIOSOCKET] No transfer requested")
             
             await elevenlabs.close()
             writer.close()
