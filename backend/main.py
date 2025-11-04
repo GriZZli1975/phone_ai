@@ -13,6 +13,8 @@ app = FastAPI(title="AI Call Center API")
 
 # Хранилище активных звонков: {caller_number: call_id}
 active_calls = {}
+# Маппинг conversation_id → caller_number
+conversation_to_caller = {}
 
 # CORS
 app.add_middleware(
@@ -92,10 +94,22 @@ async def mango_webhook(request: Request):
         return {"status": "error", "message": str(e)}
 
 
-@app.post("/api/transfer/{caller_number}/{department}")
-async def transfer_call(caller_number: str, department: str):
+@app.post("/api/transfer/{key}/{department}")
+async def transfer_call(key: str, department: str):
     """Перевод звонка через Mango API"""
-    call_id = active_calls.get(caller_number)
+    # Пробуем найти call_id:
+    # 1. По прямому ключу (caller_number)
+    call_id = active_calls.get(key)
+    
+    # 2. Если не нашли - пробуем через conversation_to_caller
+    if not call_id and key in conversation_to_caller:
+        caller_number = conversation_to_caller[key]
+        call_id = active_calls.get(caller_number)
+    
+    # 3. Если только один активный звонок - берём его (fallback)
+    if not call_id and len(active_calls) == 1:
+        call_id = list(active_calls.values())[0]
+        print(f"[MANGO] Using single active call: {call_id}", flush=True)
     
     if not call_id:
         return {"status": "error", "message": "Call ID not found"}
