@@ -124,25 +124,23 @@ class AudioSocketServer:
             # Ждём завершения ВСЕХ задач
             results = await asyncio.gather(receive_task, send_task, stream_task, return_exceptions=True)
             
-            # Проверяем очередь напрямую (не полагаемся на return из задач)
-            transfer_dept = None
-            if not elevenlabs.transfer_queue.empty():
-                try:
-                    transfer_dept = elevenlabs.transfer_queue.get_nowait()
-                except:
-                    pass
-            
-            if transfer_dept:
-                print(f"[AUDIOSOCKET] 🔀 Transfer requested to department: {transfer_dept}")
-                sip_uri = DEPARTMENT_EXTENSIONS.get(transfer_dept, DEPARTMENT_EXTENSIONS['sales'])
-                print(f"[AUDIOSOCKET] 📞 Transfer destination: {sip_uri}")
-                print(f"[AUDIOSOCKET] ⚠️ Transfer via Asterisk AMI not yet implemented - call will end")
-            
             print("[AUDIOSOCKET] Conversation cycle completed")
                 
         except Exception as e:
             print(f"[AUDIOSOCKET] Error: {e}")
         finally:
+            # Проверяем очередь перевода перед закрытием
+            transfer_dept = None
+            if not elevenlabs.transfer_queue.empty():
+                try:
+                    transfer_dept = elevenlabs.transfer_queue.get_nowait()
+                    print(f"[AUDIOSOCKET] 🔀 Transfer requested to department: {transfer_dept}")
+                    sip_uri = DEPARTMENT_EXTENSIONS.get(transfer_dept, DEPARTMENT_EXTENSIONS['sales'])
+                    print(f"[AUDIOSOCKET] 📞 Transfer destination: {sip_uri}")
+                    print(f"[AUDIOSOCKET] ⚠️ Transfer via Asterisk AMI not yet implemented - call will end")
+                except Exception as ex:
+                    print(f"[AUDIOSOCKET] Transfer check error: {ex}")
+            
             await elevenlabs.close()
             writer.close()
             await writer.wait_closed()
@@ -174,16 +172,6 @@ class AudioSocketServer:
             last_voice_ts = time.monotonic()
 
             while True:
-                # Проверяем запрос на перевод (не блокирующая проверка)
-                if not elevenlabs.transfer_queue.empty():
-                    try:
-                        transfer_dept = elevenlabs.transfer_queue.get_nowait()
-                        print(f"[AUDIOSOCKET] 📞 Transfer requested to: {transfer_dept}")
-                        # Прерываем цикл для выполнения перевода
-                        return transfer_dept
-                    except:
-                        pass
-                
                 # Читаем аудио фреймы
                 try:
                     header = await asyncio.wait_for(reader.readexactly(3), timeout=0.5)
@@ -252,20 +240,16 @@ class AudioSocketServer:
                 else:
                     print(f"[AUDIOSOCKET] Unknown frame type: {frame_type:02x} (expected 0x10 for audio)")
                     
-            # Когда цикл завершился обычным способом (hangup, не перевод)
+            # Когда цикл завершился обычным способом (hangup)
             if frame_count > 0:
                 print(f"[AUDIOSOCKET] Total frames received: {frame_count}")
                 await elevenlabs.end_user_turn()
                 print("[AUDIOSOCKET] Waiting for ElevenLabs response...")
-            
-            return None
                     
         except asyncio.IncompleteReadError:
             print(f"[AUDIOSOCKET] Connection closed by Asterisk (received {frame_count} frames)")
-            return None
         except Exception as e:
             print(f"[AUDIOSOCKET] Receive error: {e} (received {frame_count} frames)")
-            return None
             
     async def send_to_asterisk(self, writer, elevenlabs: ElevenLabsConvAI):
         """
