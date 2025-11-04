@@ -165,10 +165,26 @@ class ElevenLabsConvAI:
                     if event_id:
                         await self.ws.send(json.dumps({"type": "pong", "event_id": event_id}))
 
+                elif msg_type == 'client_tool_call':
+                    # Инструмент вызван агентом (например, transfer_to_number)
+                    tool_call = data.get('client_tool_call', {})
+                    tool_name = tool_call.get('tool_name')
+                    params = tool_call.get('parameters', {})
+                    print(f"[ELEVEN] 🔧 Tool called: {tool_name} with params: {params}")
+                    
+                    if tool_name == 'transfer_to_number':
+                        transfer_number = params.get('transfer_number')
+                        print(f"[ELEVEN] ⚡ TRANSFER REQUEST to {transfer_number}")
+                        # TODO: реализовать перевод через Asterisk
+
                 elif msg_type == 'error':
                     print(f"[ELEVEN] Error: {data}")
                     await self.audio_queue.put(None)
                     break
+                
+                else:
+                    # Логируем неизвестные события
+                    print(f"[ELEVEN] Unknown event: {msg_type}")
 
         except websockets.ConnectionClosed as exc:
             print(f"[ELEVEN] Connection closed: {exc}")
