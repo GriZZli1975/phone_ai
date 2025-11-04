@@ -70,6 +70,14 @@ from elevenlabs_conv_ai import ElevenLabsConvAI
 SPEECH_RMS_THRESHOLD = int(os.getenv("ELEVENLABS_SPEECH_THRESHOLD", "300"))
 SILENCE_TIMEOUT = float(os.getenv("ELEVENLABS_SILENCE_TIMEOUT", "0.8"))
 
+# Маппинг отделов на SIP URI в Mango Office
+DEPARTMENT_EXTENSIONS = {
+    'sales': 'sip:grizzli@formulaopel.mangosip.ru',
+    'support': 'sip:grizzli@formulaopel.mangosip.ru',  # TODO: заменить на реальный
+    'billing': 'sip:grizzli@formulaopel.mangosip.ru',  # TODO: заменить на реальный
+    'quality': 'sip:grizzli@formulaopel.mangosip.ru',
+}
+
 
 class AudioSocketServer:
     """
@@ -113,19 +121,17 @@ class AudioSocketServer:
                 elevenlabs.stream_responses()
             )
             
-            # Ждём завершения задач
-            done, pending = await asyncio.wait(
-                {receive_task, send_task, stream_task},
-                return_when=asyncio.FIRST_COMPLETED
-            )
+            # Ждём завершения ВСЕХ задач
+            results = await asyncio.gather(receive_task, send_task, stream_task, return_exceptions=True)
             
-            # Отменяем оставшиеся задачи (экономим кредиты)
-            for task in pending:
-                task.cancel()
-                try:
-                    await task
-                except asyncio.CancelledError:
-                    pass
+            # Проверяем, был ли запрос на перевод (возвращается из receive_from_asterisk)
+            transfer_dept = results[0] if results and results[0] and not isinstance(results[0], Exception) else None
+            
+            if transfer_dept:
+                print(f"[AUDIOSOCKET] 🔀 Transfer requested to department: {transfer_dept}")
+                sip_uri = DEPARTMENT_EXTENSIONS.get(transfer_dept, DEPARTMENT_EXTENSIONS['sales'])
+                print(f"[AUDIOSOCKET] 📞 Transfer destination: {sip_uri}")
+                print(f"[AUDIOSOCKET] ⚠️ Transfer via Asterisk AMI not yet implemented - call will end")
             
             print("[AUDIOSOCKET] Conversation cycle completed")
                 
@@ -231,16 +237,30 @@ class AudioSocketServer:
                 else:
                     print(f"[AUDIOSOCKET] Unknown frame type: {frame_type:02x} (expected 0x10 for audio)")
                     
-            # Когда цикл завершился, сигнализируем конец (если не было hangup)
-            if frame_count > 0:
+            # Проверяем, был ли запрос на перевод
+            transfer_dept = None
+            if not elevenlabs.transfer_queue.empty():
+                try:
+                    transfer_dept = elevenlabs.transfer_queue.get_nowait()
+                    print(f"[AUDIOSOCKET] 📞 Transfer requested to: {transfer_dept}")
+                except:
+                    pass
+            
+            # Когда цикл завершился, сигнализируем конец (если не было hangup и нет перевода)
+            if frame_count > 0 and not transfer_dept:
                 print(f"[AUDIOSOCKET] Total frames received: {frame_count}")
                 await elevenlabs.end_user_turn()
                 print("[AUDIOSOCKET] Waiting for ElevenLabs response...")
+            
+            # Возвращаем department для перевода (если был запрос)
+            return transfer_dept
                     
         except asyncio.IncompleteReadError:
             print(f"[AUDIOSOCKET] Connection closed by Asterisk (received {frame_count} frames)")
+            return None
         except Exception as e:
             print(f"[AUDIOSOCKET] Receive error: {e} (received {frame_count} frames)")
+            return None
             
     async def send_to_asterisk(self, writer, elevenlabs: ElevenLabsConvAI):
         """
@@ -278,8 +298,8 @@ class AudioSocketServer:
                     total_sent += len(frame_data)
                     chunks_sent += 1
                     
-                    # Минимальная задержка только для drain()
-                    # await asyncio.sleep(0.001)  # можно раскомментировать при проблемах
+                    # Задержка 10ms для качественного звука (НЕ УДАЛЯТЬ!)
+                    await asyncio.sleep(0.01)
                     
                     if chunks_sent <= 5 or chunks_sent % 50 == 0:
                         print(f"[AUDIOSOCKET] ⬅️ Sent frame #{chunks_sent}: {len(frame_data)} bytes")

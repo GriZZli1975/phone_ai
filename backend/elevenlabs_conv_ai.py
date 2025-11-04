@@ -44,11 +44,13 @@ class ElevenLabsConvAI:
         self.ws = None
         self.conversation_id = None
         self.audio_queue = None
+        self.transfer_queue = None
         
     async def connect(self):
         """Подключение к ElevenLabs Conversational AI"""
         try:
             self.audio_queue = asyncio.Queue()
+            self.transfer_queue = asyncio.Queue()
             
             # Формируем URL с API ключом
             url = f"{ELEVENLABS_WS_URL}?agent_id={self.agent_id}"
@@ -166,16 +168,29 @@ class ElevenLabsConvAI:
                         await self.ws.send(json.dumps({"type": "pong", "event_id": event_id}))
 
                 elif msg_type == 'client_tool_call':
-                    # Инструмент вызван агентом (например, transfer_to_number)
+                    # Клиентский инструмент вызван агентом
                     tool_call = data.get('client_tool_call', {})
                     tool_name = tool_call.get('tool_name')
+                    tool_call_id = tool_call.get('tool_call_id')
                     params = tool_call.get('parameters', {})
                     print(f"[ELEVEN] 🔧 Tool called: {tool_name} with params: {params}")
                     
-                    if tool_name == 'transfer_to_number':
-                        transfer_number = params.get('transfer_number')
-                        print(f"[ELEVEN] ⚡ TRANSFER REQUEST to {transfer_number}")
-                        # TODO: реализовать перевод через Asterisk
+                    if tool_name == 'transfer_call':
+                        department = params.get('department', 'sales')
+                        print(f"[ELEVEN] ⚡ TRANSFER REQUEST to department: {department}")
+                        
+                        # Кладём в очередь для обработки в audiosocket_server
+                        await self.transfer_queue.put(department)
+                        
+                        # Отправляем успешный результат обратно в ElevenLabs
+                        result_msg = {
+                            "type": "client_tool_result",
+                            "tool_call_id": tool_call_id,
+                            "result": f"Transferring to {department} department",
+                            "is_error": False
+                        }
+                        await self.ws.send(json.dumps(result_msg))
+                        print(f"[ELEVEN] ✅ Sent tool result for {tool_call_id}")
 
                 elif msg_type == 'error':
                     print(f"[ELEVEN] Error: {data}")
